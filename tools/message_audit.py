@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 import sys
 from collections import Counter, defaultdict
+from math import gcd
 from pathlib import Path
 
 
@@ -48,6 +49,8 @@ TOUCH_CAPACITY = 50
 MESSAGE_INTERVAL_MS = 60_000
 TOUCH_FLIRT_DISPLAY_MS = 10_000
 UINT32_MASK = 0xFFFFFFFF
+AUTO_RANDOM_SALT = 0xA341316C
+TOUCH_RANDOM_SALT = 0xC8013EA4
 
 
 def extract_strings(source: str, array_name: str) -> list[str]:
@@ -79,18 +82,86 @@ def extract_pool_configs(source: str) -> list[tuple[int, int, int]]:
     ]
 
 
-def auto_multiplier(capacity: int) -> int:
-    return {120: 43, 100: 37, 80: 27}[capacity]
+def mix_seed(value: int) -> int:
+    value &= UINT32_MASK
+    value ^= value >> 16
+    value = (value * 0x7FEB352D) & UINT32_MASK
+    value ^= value >> 15
+    value = (value * 0x846CA68B) & UINT32_MASK
+    value ^= value >> 16
+    return value or 0x6D2B79F5
 
 
-def auto_permuted(pool_index: int, counter: int, capacity: int) -> int:
-    offset = (pool_index * 17 + 11) % capacity
-    return (auto_multiplier(capacity) * counter + offset) % capacity
+def next_random(state: int) -> int:
+    value = state
+    value ^= (value << 13) & UINT32_MASK
+    value ^= value >> 17
+    value ^= (value << 5) & UINT32_MASK
+    return (value & UINT32_MASK) or 0x6D2B79F5
 
 
-def touch_permuted(pool_index: int, counter: int) -> int:
-    offset = (pool_index * 19 + 7) % TOUCH_CAPACITY
-    return (21 * counter + offset) % TOUCH_CAPACITY
+class PermutationEngine:
+    def __init__(self, seed: int, salt: int) -> None:
+        self.random_state = mix_seed(seed ^ salt)
+        self.counters = [0] * 24
+        self.parameters: list[tuple[int, int] | None] = [None] * 24
+        self.last_indexes: list[int | None] = [None] * 24
+        self.parameter_history: list[list[tuple[int, int]]] = [
+            [] for _ in range(24)
+        ]
+
+    def _random(self) -> int:
+        self.random_state = next_random(self.random_state)
+        return self.random_state
+
+    def _choose_multiplier(self, capacity: int, setup_count: int) -> int:
+        while True:
+            candidate = 1 + self._random() % (capacity - 1)
+            setup_step = candidate % setup_count
+            if (
+                gcd(candidate, capacity) == 1
+                and setup_step not in (1, setup_count - 1)
+            ):
+                return candidate
+
+    def _configure(
+        self,
+        pool_index: int,
+        capacity: int,
+        setup_count: int,
+    ) -> None:
+        previous = self.parameters[pool_index]
+        last_index = self.last_indexes[pool_index]
+        while True:
+            multiplier = self._choose_multiplier(capacity, setup_count)
+            offset = self._random() % capacity
+            parameters = (multiplier, offset)
+            if previous is None or (
+                parameters != previous and offset != last_index
+            ):
+                break
+        self.parameters[pool_index] = parameters
+        self.parameter_history[pool_index].append(parameters)
+
+    def select(
+        self,
+        pool_index: int,
+        capacity: int,
+        setup_count: int,
+        initial_counter: int = 0,
+    ) -> int:
+        if self.parameters[pool_index] is None:
+            self._configure(pool_index, capacity, setup_count)
+            self.counters[pool_index] = initial_counter % capacity
+
+        multiplier, offset = self.parameters[pool_index]  # type: ignore[misc]
+        selected = (multiplier * self.counters[pool_index] + offset) % capacity
+        self.last_indexes[pool_index] = selected
+        self.counters[pool_index] += 1
+        if self.counters[pool_index] >= capacity:
+            self.counters[pool_index] = 0
+            self._configure(pool_index, capacity, setup_count)
+        return selected
 
 
 def context_for_minute(minute: int) -> tuple[int, int, int]:
@@ -144,10 +215,10 @@ def simulate_automatic_day(
     setups: list[str],
     reactions: list[str],
     inject_touches: bool,
+    seed: int,
 ) -> list[tuple[str, str]]:
-    auto_counters = [0] * 24
-    auto_initialized = [False] * 24
-    touch_counters = [0] * 24
+    auto_engine = PermutationEngine(seed, AUTO_RANDOM_SALT)
+    touch_engine = PermutationEngine(seed, TOUCH_RANDOM_SALT)
     outputs: list[tuple[str, str]] = []
     elapsed = 0
     start_wall_second = start_minute * 60 + start_second
@@ -160,16 +231,12 @@ def simulate_automatic_day(
         _, setup_count, _ = configs[pool_index]
         capacity = setup_count * len(reactions)
 
-        if not auto_initialized[pool_index]:
-            auto_counters[pool_index] = context_minute % capacity
-            auto_initialized[pool_index] = True
-
-        combination = auto_permuted(
+        combination = auto_engine.select(
             pool_index,
-            auto_counters[pool_index],
             capacity,
+            setup_count,
+            0,
         )
-        auto_counters[pool_index] = (auto_counters[pool_index] + 1) % capacity
         outputs.append(
             pair_from_auto_index(
                 pool_index,
@@ -183,9 +250,12 @@ def simulate_automatic_day(
         # Exercise independent TOUCH progression during the same simulated day.
         # It must never consume or rewrite an automatic counter.
         if inject_touches and len(outputs) % 17 == 0:
-            touch_counters[pool_index] = (
-                touch_counters[pool_index] + 2
-            ) % TOUCH_CAPACITY
+            touch_engine.select(
+                pool_index, TOUCH_CAPACITY, TOUCH_SETUP_COUNT
+            )
+            touch_engine.select(
+                pool_index, TOUCH_CAPACITY, TOUCH_SETUP_COUNT
+            )
 
         elapsed += min(60, next_context_boundary_delta(wall_second))
 
@@ -306,6 +376,13 @@ def main() -> int:
     auto_contexts: dict[tuple[str, str], list[str]] = defaultdict(list)
     touch_contexts: dict[tuple[str, str], list[str]] = defaultdict(list)
     pool_rows: list[tuple[str, str, int, int, int]] = []
+    random_order_rows: list[tuple[str, list[int], list[int]]] = []
+    auto_boundary_repeat_failures = 0
+    touch_boundary_repeat_failures = 0
+    wrong_context_auto = 0
+    wrong_context_touch = 0
+    identical_parameter_cycles = 0
+    identical_seed_orders = 0
     for pool_index, (_, setup_count, duration) in enumerate(configs):
         context = f"{VIBES[pool_index // 3]}/{PHASES[pool_index % 3]}"
         for pair in auto_pools[pool_index]:
@@ -332,17 +409,82 @@ def main() -> int:
             errors.append(f"{context}: AUTO capacity below phase duration")
         if touch_capacity != 50:
             errors.append(f"{context}: TOUCH capacity is not exactly 50")
-        if len(
-            {
-                auto_permuted(pool_index, counter, auto_capacity)
-                for counter in range(auto_capacity)
-            }
-        ) != auto_capacity:
+        test_seed = 0x6B414C41 ^ (pool_index * 0x1021)
+        auto_engine = PermutationEngine(test_seed, AUTO_RANDOM_SALT)
+        auto_indexes = [
+            auto_engine.select(pool_index, auto_capacity, setup_count)
+            for _ in range(auto_capacity + 1)
+        ]
+        touch_engine = PermutationEngine(test_seed, TOUCH_RANDOM_SALT)
+        touch_indexes = [
+            touch_engine.select(
+                pool_index, TOUCH_CAPACITY, TOUCH_SETUP_COUNT
+            )
+            for _ in range(TOUCH_CAPACITY + 1)
+        ]
+
+        if len(set(auto_indexes[:auto_capacity])) != auto_capacity:
             errors.append(f"{context}: AUTO permutation is not full-cycle")
-        if len(
-            {touch_permuted(pool_index, counter) for counter in range(touch_capacity)}
-        ) != touch_capacity:
+        if len(set(touch_indexes[:touch_capacity])) != touch_capacity:
             errors.append(f"{context}: TOUCH permutation is not full-cycle")
+        if auto_indexes[auto_capacity - 1] == auto_indexes[auto_capacity]:
+            auto_boundary_repeat_failures += 1
+        if touch_indexes[touch_capacity - 1] == touch_indexes[touch_capacity]:
+            touch_boundary_repeat_failures += 1
+        if len(set(auto_engine.parameter_history[pool_index][:2])) != 2:
+            identical_parameter_cycles += 1
+        if len(set(touch_engine.parameter_history[pool_index][:2])) != 2:
+            identical_parameter_cycles += 1
+
+        second_seed_engine = PermutationEngine(test_seed ^ 0x9E3779B9, AUTO_RANDOM_SALT)
+        second_seed_indexes = [
+            second_seed_engine.select(pool_index, auto_capacity, setup_count)
+            for _ in range(min(12, auto_capacity))
+        ]
+        if auto_indexes[:len(second_seed_indexes)] == second_seed_indexes:
+            identical_seed_orders += 1
+
+        for selected in auto_indexes[:auto_capacity]:
+            if not 0 <= selected < auto_capacity:
+                wrong_context_auto += 1
+            elif pair_from_auto_index(
+                pool_index, selected, configs, auto_setups, auto_reactions
+            ) not in auto_pools[pool_index]:
+                wrong_context_auto += 1
+        for selected in touch_indexes[:touch_capacity]:
+            if not 0 <= selected < touch_capacity:
+                wrong_context_touch += 1
+            elif pair_from_touch_index(
+                pool_index, selected, touch_setups, touch_reactions
+            ) not in touch_pools[pool_index]:
+                wrong_context_touch += 1
+
+        if pool_index in (0, 7, 13, 19, 23):
+            random_order_rows.append(
+                (context, auto_indexes[:10], touch_indexes[:10])
+            )
+
+    if auto_boundary_repeat_failures:
+        errors.append(
+            f"AUTO cycle-boundary repeats: {auto_boundary_repeat_failures}"
+        )
+    if touch_boundary_repeat_failures:
+        errors.append(
+            f"TOUCH cycle-boundary repeats: {touch_boundary_repeat_failures}"
+        )
+    if identical_parameter_cycles:
+        errors.append(
+            f"Cycles that reused permutation parameters: {identical_parameter_cycles}"
+        )
+    if identical_seed_orders:
+        errors.append(
+            f"Contexts with identical orders across different seeds: {identical_seed_orders}"
+        )
+    if wrong_context_auto or wrong_context_touch:
+        errors.append(
+            "Wrong-context selections: "
+            f"AUTO={wrong_context_auto}, TOUCH={wrong_context_touch}"
+        )
 
     fragments = auto_setups + auto_reactions + touch_setups + touch_reactions
     maximum_line_length = max(len(fragment) for fragment in fragments)
@@ -377,6 +519,32 @@ def main() -> int:
         fragment
         for fragment in touch_setups + touch_reactions
         if any(term in fragment for term in unsafe_touch_terms)
+    ]
+    # Mechanical regression guard; the complete reaction bank is also
+    # manually reviewed because flirt quality cannot be proven by keywords.
+    clearly_flirty_markers = (
+        "MISSED", "THINKING OF ME", "RESIST", "BLUSH", "WITH ME",
+        "YOU LIKE", "LIKE THIS", "JUST US", "CLOSER", "CAME FOR ME",
+        "SUITS US", "YOUR WAKE-UP", "CRUSH", "CHOSE ME", "SPECIAL",
+        "FLIRT", "CUTE", "ME BEFORE", "EAGER", "LOOK AT ME",
+        "FLATTERED", "ADORABLE", "KEEP LOOKING", "DATE", "PICK ME",
+        "SMOOTH MOVE", "EYES ON ME", "CHOOSE ME", "YOUR SNACK",
+        "SAVE ME A SEAT", "HAVE TASTE", "DESSERT IS ME", "I LIKE YOU",
+        "HUNGRY FOR ME", "SWEET CHOICE", "WANT ATTENTION", "MISSED MY FACE",
+        "YOU NEED ME", "YOUR BREAK", "CAUGHT YOU", "YOU FOUND ME",
+        "LIKE THE LOOK", "STAY A WHILE", "INTO ME", "DON'T LEAVE",
+        "YOUR ESCAPE", "HOME WITH ME", "LINGER WITH ME", "FOR TWO",
+        "YOU + ME", "MISS YOU", "CHARMING", "STAY CLOSE", "LIKE ME",
+        "FAVORITE TAP", "DREAM OF ME", "STAY UP WITH ME", "WE LOOK CUTE",
+        "BLUSH BEFORE", "DREAMY",
+    )
+    not_clearly_flirty_reactions = [
+        reaction
+        for reaction in touch_reactions
+        if not any(marker in reaction for marker in clearly_flirty_markers)
+    ]
+    not_clearly_flirty_outputs = [
+        pair for pair in touch_outputs if pair[1] in not_clearly_flirty_reactions
     ]
     awkward_touch = [
         pair
@@ -461,6 +629,11 @@ def main() -> int:
         errors.append(f"Flirty/touch terms in AUTO corpus: {flirty_auto}")
     if unsafe_touch:
         errors.append(f"Unsafe TOUCH terms: {unsafe_touch}")
+    if not_clearly_flirty_outputs:
+        errors.append(
+            "TOUCH outputs without an explicitly flirty reaction: "
+            f"{len(not_clearly_flirty_outputs)}"
+        )
     if awkward_touch:
         errors.append(f"Awkward repeated-keyword TOUCH pairs: {awkward_touch}")
     if exact_echo_touch:
@@ -490,6 +663,7 @@ def main() -> int:
                 auto_setups,
                 auto_reactions,
                 inject_touches=False,
+                seed=0x4B414C41 ^ start_minute ^ (start_second << 16),
             )
             with_touches = simulate_automatic_day(
                 start_minute,
@@ -498,6 +672,7 @@ def main() -> int:
                 auto_setups,
                 auto_reactions,
                 inject_touches=True,
+                seed=0x4B414C41 ^ start_minute ^ (start_second << 16),
             )
             tested_starts += 1
             minimum_day_selections = min(minimum_day_selections, len(baseline))
@@ -517,27 +692,33 @@ def main() -> int:
     # Required exact sequence: A1, T1, T2, A2, A3, T3, A4.
     pool_index = VIBES.index("EVENING") * 3 + PHASES.index("MIDDLE")
     auto_capacity = len(auto_pools[pool_index])
-    auto_counter = 7
-    touch_counter = 0
+    setup_count = configs[pool_index][1]
+    interleaved_auto_engine = PermutationEngine(0x6B414C41, AUTO_RANDOM_SALT)
+    interleaved_touch_engine = PermutationEngine(0x6B414C41, TOUCH_RANDOM_SALT)
     interleaving: list[tuple[str, tuple[str, str]]] = []
     for label in ("A1", "T1", "T2", "A2", "A3", "T3", "A4"):
         if label.startswith("A"):
-            index = auto_permuted(pool_index, auto_counter, auto_capacity)
-            auto_counter = (auto_counter + 1) % auto_capacity
+            index = interleaved_auto_engine.select(
+                pool_index, auto_capacity, setup_count
+            )
             pair = pair_from_auto_index(
                 pool_index, index, configs, auto_setups, auto_reactions
             )
         else:
-            index = touch_permuted(pool_index, touch_counter)
-            touch_counter = (touch_counter + 1) % TOUCH_CAPACITY
+            index = interleaved_touch_engine.select(
+                pool_index, TOUCH_CAPACITY, TOUCH_SETUP_COUNT
+            )
             pair = pair_from_touch_index(
                 pool_index, index, touch_setups, touch_reactions
             )
         interleaving.append((label, pair))
 
+    baseline_auto_engine = PermutationEngine(0x6B414C41, AUTO_RANDOM_SALT)
     expected_auto_indexes = [
-        auto_permuted(pool_index, counter, auto_capacity)
-        for counter in range(7, 11)
+        baseline_auto_engine.select(
+            pool_index, auto_capacity, setup_count
+        )
+        for _ in range(4)
     ]
     actual_auto_pairs = [pair for label, pair in interleaving if label.startswith("A")]
     expected_auto_pairs = [
@@ -551,19 +732,31 @@ def main() -> int:
         errors.append("Required trigger interleaving repeated TOUCH output")
 
     # Overlay scenario: A1 -> T1 -> restore A1 -> A2.
-    a1_index = auto_permuted(pool_index, 7, auto_capacity)
-    a2_index = auto_permuted(pool_index, 8, auto_capacity)
+    overlay_auto_engine = PermutationEngine(0x6B414C41, AUTO_RANDOM_SALT)
+    overlay_touch_engine = PermutationEngine(0x6B414C41, TOUCH_RANDOM_SALT)
+    a1_index = overlay_auto_engine.select(
+        pool_index, auto_capacity, setup_count
+    )
+    a2_index = overlay_auto_engine.select(
+        pool_index, auto_capacity, setup_count
+    )
     a1 = pair_from_auto_index(
         pool_index, a1_index, configs, auto_setups, auto_reactions
     )
     a2 = pair_from_auto_index(
         pool_index, a2_index, configs, auto_setups, auto_reactions
     )
+    t1_index = overlay_touch_engine.select(
+        pool_index, TOUCH_CAPACITY, TOUCH_SETUP_COUNT
+    )
+    t2_index = overlay_touch_engine.select(
+        pool_index, TOUCH_CAPACITY, TOUCH_SETUP_COUNT
+    )
     t1 = pair_from_touch_index(
-        pool_index, touch_permuted(pool_index, 0), touch_setups, touch_reactions
+        pool_index, t1_index, touch_setups, touch_reactions
     )
     t2 = pair_from_touch_index(
-        pool_index, touch_permuted(pool_index, 1), touch_setups, touch_reactions
+        pool_index, t2_index, touch_setups, touch_reactions
     )
 
     overlay_actions = (
@@ -600,9 +793,15 @@ def main() -> int:
 
     new_pool_index = VIBES.index("EVENING") * 3 + PHASES.index("LATE")
     new_capacity = len(auto_pools[new_pool_index])
+    new_context_engine = PermutationEngine(0x6B414C41, AUTO_RANDOM_SALT)
+    new_index = new_context_engine.select(
+        new_pool_index,
+        new_capacity,
+        configs[new_pool_index][1],
+    )
     new_normal = pair_from_auto_index(
         new_pool_index,
-        auto_permuted(new_pool_index, 0, new_capacity),
+        new_index,
         configs,
         auto_setups,
         auto_reactions,
@@ -614,14 +813,57 @@ def main() -> int:
         errors.append("Context transition did not replace old overlay cache")
     context_sequence = (("A1", a1), ("T1", t1), ("NEW-CONTEXT NORMAL", new_normal))
 
+    touch_cycle_engine = PermutationEngine(0x6B414C41, TOUCH_RANDOM_SALT)
     touch_cycle_indexes = [
-        touch_permuted(pool_index, counter) for counter in range(TOUCH_CAPACITY)
+        touch_cycle_engine.select(
+            pool_index, TOUCH_CAPACITY, TOUCH_SETUP_COUNT
+        )
+        for _ in range(TOUCH_CAPACITY)
     ]
-    touch_51st_index = touch_permuted(pool_index, TOUCH_CAPACITY)
+    touch_51st_index = touch_cycle_engine.select(
+        pool_index, TOUCH_CAPACITY, TOUCH_SETUP_COUNT
+    )
     if len(set(touch_cycle_indexes)) != TOUCH_CAPACITY:
         errors.append("50-touch cycle is not unique")
-    if touch_51st_index != touch_cycle_indexes[0]:
-        errors.append("51st touch does not begin the next cycle")
+    if touch_51st_index == touch_cycle_indexes[-1]:
+        errors.append("51st touch immediately repeated the 50th touch")
+
+    if a2_index == a1_index:
+        errors.append("AUTO selection repeated after TOUCH restoration")
+    if overlay_auto_engine.counters[pool_index] != 2:
+        errors.append("AUTO counter reset during TOUCH overlay simulation")
+    if a2_index in (0, 1):
+        errors.append("Post-TOUCH AUTO test landed on source index 0 or 1")
+
+    # Hundreds of mixed events must leave the AUTO order byte-for-byte equal
+    # to an AUTO-only engine started with the same seed and context state.
+    long_auto_engine = PermutationEngine(0x13579BDF, AUTO_RANDOM_SALT)
+    long_touch_engine = PermutationEngine(0x13579BDF, TOUCH_RANDOM_SALT)
+    long_auto_indexes: list[int] = []
+    long_touch_indexes: list[int] = []
+    for event in range(600):
+        if event % 5 in (1, 3):
+            long_touch_indexes.append(
+                long_touch_engine.select(
+                    pool_index, TOUCH_CAPACITY, TOUCH_SETUP_COUNT
+                )
+            )
+        else:
+            long_auto_indexes.append(
+                long_auto_engine.select(
+                    pool_index, auto_capacity, setup_count
+                )
+            )
+
+    long_baseline_engine = PermutationEngine(0x13579BDF, AUTO_RANDOM_SALT)
+    long_baseline_indexes = [
+        long_baseline_engine.select(
+            pool_index, auto_capacity, setup_count
+        )
+        for _ in range(len(long_auto_indexes))
+    ]
+    if long_auto_indexes != long_baseline_indexes:
+        errors.append("Long TOUCH interleaving changed AUTO order")
 
     rollover_start = 0xFFFFFF00
     rollover_restore = (rollover_start + TOUCH_FLIRT_DISPLAY_MS) & UINT32_MASK
@@ -657,6 +899,11 @@ def main() -> int:
     print(f"Non-ASCII fragments: {len(non_ascii)}")
     print(f"Flirty/touch AUTO fragments: {len(flirty_auto)}")
     print(f"Unsafe TOUCH fragments: {len(unsafe_touch)}")
+    print(
+        "Clearly flirty TOUCH outputs: "
+        f"{len(touch_outputs) - len(not_clearly_flirty_outputs)}"
+    )
+    print(f"Not clearly flirty TOUCH outputs: {len(not_clearly_flirty_outputs)}")
     print(f"Awkward repeated-keyword TOUCH pairs: {len(awkward_touch)}")
     print(f"Exact two-line echo TOUCH pairs: {len(exact_echo_touch)}")
     print(f"Manglish fragments detected: {len(manglish_fragments)}")
@@ -667,12 +914,28 @@ def main() -> int:
     print(f"Selections per simulated day: {minimum_day_selections}..{maximum_day_selections}")
     print(f"24-hour simulations with AUTO repeats: {duplicate_day_runs}")
     print(f"AUTO sequences changed by injected touches: {touch_changed_auto_runs}")
+    print(f"Wrong-context AUTO selections: {wrong_context_auto}")
+    print(f"Wrong-context TOUCH selections: {wrong_context_touch}")
+    print(f"AUTO cycle-boundary repeat failures: {auto_boundary_repeat_failures}")
+    print(f"TOUCH cycle-boundary repeat failures: {touch_boundary_repeat_failures}")
+    print(f"Reused cycle parameter pairs: {identical_parameter_cycles}")
+    print(f"Identical orders across different seeds: {identical_seed_orders}")
+    print(f"Long interleaving AUTO events: {len(long_auto_indexes)}")
+    print(f"Long interleaving TOUCH events: {len(long_touch_indexes)}")
+    print(
+        "Long interleaving changed AUTO order: "
+        f"{long_auto_indexes != long_baseline_indexes}"
+    )
 
     print("\n=== REQUIRED TRIGGER INTERLEAVING ===")
     for label, (line1, line2) in interleaving:
         print(f"{label}: {line1} / {line2}")
 
     print("\n=== FLIRT OVERLAY SIMULATION ===")
+    print(
+        f"Indexes: A{a1_index} -> T{t1_index} -> "
+        f"restore A{a1_index} -> A{a2_index}"
+    )
     for label, (line1, line2) in overlay_sequence:
         print(f"{label}: {line1} / {line2}")
     print("\n=== RE-TOUCH SIMULATION ===")
@@ -684,8 +947,14 @@ def main() -> int:
     print("\n=== TOUCH CYCLE ===")
     print(f"Selections before wrap: {TOUCH_CAPACITY}")
     print(f"Unique before wrap: {len(set(touch_cycle_indexes))}")
-    print(f"51st restarts at first index: {touch_51st_index == touch_cycle_indexes[0]}")
+    print(f"51st index: {touch_51st_index}")
+    print(f"51st differs from 50th: {touch_51st_index != touch_cycle_indexes[-1]}")
     print("Millis rollover tests: PASS")
+
+    print("\n=== RANDOMIZED INDEX SAMPLES ===")
+    for context, auto_indexes, touch_indexes in random_order_rows:
+        print(f"{context} AUTO: {', '.join(str(index) for index in auto_indexes)}")
+        print(f"{context} TOUCH: {', '.join(str(index) for index in touch_indexes)}")
 
     print_samples("AUTO", auto_pools)
     print_samples("TOUCH", touch_pools)

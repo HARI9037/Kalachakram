@@ -20,8 +20,13 @@ enum MessagePersonality {
     PERSONALITY_FLIRTY
 };
 
+// Seeds the independent AUTO and TOUCH permutation generators.
+// Call once during startup before the first message selection.
+void initMessageRandomization(uint32_t seed);
+
 // Selects the next unique combination from the active contextual pool.
-// contextMinute anchors a mid-phase startup to its wall-clock minute slot.
+// contextMinute is supplied by the scheduler for context diagnostics; each
+// pool keeps its own randomized cycle once it is first used.
 void selectMessage(
     VibeCategory vibe,
     ContextPhase phase,

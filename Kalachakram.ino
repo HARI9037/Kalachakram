@@ -61,7 +61,7 @@ void setup() {
     
     Serial.println(F("================================"));
     Serial.println(F("KALACHAKRAM"));
-    Serial.println(F("V0.6.2 - ENGLISH PERSONALITY"));
+    Serial.println(F("V0.6.3 - RANDOMIZED PERSONALITY"));
     Serial.println(F("================================"));
 
 #if KALACHAKRAM_TEST_MODE
@@ -78,6 +78,13 @@ void setup() {
     initTimeEngine(__TIME__);
     initDisplay();
     initTouchSensor();
+    // A0 is otherwise unused. Its floating ADC noise is mixed with startup
+    // timing jitter so real boots do not reuse one fixed permutation order.
+    uint32_t messageSeed = micros();
+    messageSeed ^= (uint32_t)analogRead(A0) << 20;
+    messageSeed ^= micros() << 7;
+    messageSeed ^= (uint32_t)analogRead(A0);
+    initMessageRandomization(messageSeed);
 #endif
 }
 
@@ -255,6 +262,7 @@ void runSinglePhaseTest(
 }
 
 void runTests() {
+    initMessageRandomization(0x6B414C41UL);
     int passCount = 0;
     int failCount = 0;
     
@@ -499,7 +507,7 @@ void runTests() {
     if (schedulerFailures > 0) msgFail++;
     else msgPass++;
     
-    Serial.println(F("\n=== V0.6.2 RESULT ==="));
+    Serial.println(F("\n=== V0.6.3 RESULT ==="));
     Serial.print(msgPass);
     Serial.println(F(" PASSED"));
     Serial.print(msgFail);

@@ -492,100 +492,100 @@ const char touchLine1Fragments[][17] PROGMEM = {
 
 const char touchReactionLine2Fragments[][17] PROGMEM = {
     // CURSED_HOURS
-    "I NOTICED.",
-    "BOLD NIGHT MOVE.",
     "MISSED ME?",
-    "I'M IMPRESSED.",
-    "HOW DEVOTED.",
-    "STAY A MOMENT.",
-    "HERE YOU ARE.",
-    "VERY SMOOTH.",
+    "THINKING OF ME?",
+    "CAN'T RESIST?",
     "I MIGHT BLUSH.",
-    "BAD INFLUENCE.",
+    "STAY WITH ME.",
+    "YOU LIKE THIS.",
+    "JUST US AWAKE.",
+    "COME CLOSER.",
+    "YOU CAME FOR ME.",
+    "NIGHT SUITS US.",
 
     // TOO_EARLY
-    "I'M HONORED.",
-    "BRAVE PRIORITY.",
-    "THAT WAS CUTE.",
-    "GOOD MORNING.",
+    "YOU MISSED ME?",
+    "I'M YOUR WAKE-UP",
+    "EARLY CRUSH?",
     "YOU CHOSE ME.",
-    "EARLY AND BOLD.",
-    "I SAW THAT.",
-    "ASK NICELY.",
-    "YOU HAVE TASTE.",
-    "WHAT A START.",
+    "I FEEL SPECIAL.",
+    "FLIRTING EARLY?",
+    "THAT WAS CUTE.",
+    "ME BEFORE COFFEE",
+    "SO EAGER, HUH?",
+    "I LIKE THIS.",
 
     // MORNING
-    "WISE DECISION.",
+    "LOOK AT ME.",
     "I'M FLATTERED.",
-    "HELLO AGAIN.",
-    "FOCUS, PLEASE.",
-    "YOU FOUND ME.",
-    "NICE PRIORITIES.",
+    "YOU'RE ADORABLE.",
+    "CRUSH DETECTED.",
     "KEEP LOOKING.",
-    "VERY PRODUCTIVE.",
-    "I LIKE THIS.",
-    "SMOOTH START.",
+    "YOU LIKE ME.",
+    "DATE THE CLOCK?",
+    "PICK ME INSTEAD.",
+    "SMOOTH MOVE.",
+    "EYES ON ME.",
 
     // LUNCH_LOADING
-    "I'M NOT A SNACK.",
-    "CHOOSE WISELY.",
-    "HOW SWEET.",
-    "DESSERT LATER.",
-    "I'M RIGHT HERE.",
-    "GOOD TASTE.",
-    "I CAN TELL.",
-    "THAT WAS SMOOTH.",
+    "CHOOSE ME.",
+    "I'M YOUR SNACK.",
     "SAVE ME A SEAT.",
-    "YOU CAME BACK.",
+    "YOU HAVE TASTE.",
+    "DESSERT IS ME.",
+    "DATE WITH ME?",
+    "I LIKE YOU.",
+    "HUNGRY FOR ME?",
+    "SWEET CHOICE.",
+    "I WANT ATTENTION",
 
     // AFTERNOON
-    "I CAN FIX BORED.",
-    "FOUND YOU.",
-    "NAPS CAN WAIT.",
+    "COME SIT CLOSER.",
+    "MISSED MY FACE?",
     "YOU NEED ME.",
-    "I CAUGHT THAT.",
-    "COME CLOSER.",
-    "I'M LISTENING.",
-    "NICE DETOUR.",
-    "TRY THAT AGAIN.",
-    "SO CURIOUS.",
+    "I'M YOUR BREAK.",
+    "FLIRT BREAK?",
+    "CAUGHT YOU.",
+    "YOU FOUND ME.",
+    "I LIKE THE LOOK.",
+    "STAY A WHILE.",
+    "STILL INTO ME?",
 
     // DAY_IS_DYING
+    "STAY WITH ME?",
     "DON'T LEAVE YET.",
-    "STAY WITH ME.",
-    "PERFECT TIMING.",
-    "I'M STILL HERE.",
-    "SUNSET SUITS US.",
-    "DON'T RUSH OFF.",
-    "ESCAPE FOUND.",
-    "THAT WAS SWEET.",
-    "LINGER A LITTLE.",
-    "NIGHT CAN WAIT.",
+    "SUNSET DATE?",
+    "I'M YOUR ESCAPE.",
+    "HOME WITH ME?",
+    "LINGER WITH ME.",
+    "EVENING FOR TWO.",
+    "PLANS: YOU + ME",
+    "ONE MORE FLIRT?",
+    "I'LL MISS YOU.",
 
     // EVENING
-    "NOW WE'RE CLOSE.",
-    "GOOD CHOICE.",
-    "I MISSED THIS.",
-    "THERE YOU ARE.",
+    "PLANS WITH ME?",
+    "I MISSED YOU.",
     "YOU'RE CHARMING.",
-    "CAUGHT YOU.",
-    "ASK ME AGAIN.",
-    "THAT WAS BOLD.",
+    "DATE NIGHT?",
+    "STAY CLOSE.",
     "BLUSHING. MAYBE.",
-    "NO PLANS NEEDED.",
+    "YOU LIKE ME?",
+    "FLIRT WITH ME.",
+    "JUST US TONIGHT.",
+    "MY FAVORITE TAP.",
 
     // GO_TO_BED
-    "DREAMING OF ME?",
-    "JUST ONE MORE?",
-    "I'M STILL AWAKE.",
-    "HOW ROMANTIC.",
-    "BED CAN WAIT.",
+    "THINKING OF ME.",
+    "DREAM OF ME.",
     "YOU MISSED ME.",
-    "NIGHT OWL, HUH?",
-    "I'LL ALLOW IT.",
-    "SWEET DREAMS.",
-    "VISIT AGAIN."
+    "STAY UP WITH ME",
+    "LAST FLIRT, HUH?",
+    "PICK ME.",
+    "WE LOOK CUTE.",
+    "YOU CAME FOR ME?",
+    "BLUSH BEFORE BED",
+    "DREAMY, HUH?"
 };
 
 // {line1 offset, line1 count, phase duration in minutes}
@@ -632,11 +632,20 @@ const ContextPoolConfig contextPools[8][3] PROGMEM = {
     }
 };
 
-// Retaining one counter per pool prevents an arbitrary mid-phase boot from
-// replaying that starting pool when it is revisited just before 24 hours.
+// Per-pool state keeps AUTO and TOUCH traversal completely independent.
+// Multipliers and offsets are regenerated at each cycle boundary.
 static uint16_t autoSelectionCounters[VIBE_COUNT * PHASE_COUNT] = {0};
 static uint8_t touchSelectionCounters[VIBE_COUNT * PHASE_COUNT] = {0};
+static uint8_t autoPermutationMultipliers[VIBE_COUNT * PHASE_COUNT] = {0};
+static uint8_t autoPermutationOffsets[VIBE_COUNT * PHASE_COUNT] = {0};
+static uint8_t autoLastIndexes[VIBE_COUNT * PHASE_COUNT] = {0};
+static uint8_t touchPermutationMultipliers[VIBE_COUNT * PHASE_COUNT] = {0};
+static uint8_t touchPermutationOffsets[VIBE_COUNT * PHASE_COUNT] = {0};
+static uint8_t touchLastIndexes[VIBE_COUNT * PHASE_COUNT] = {0};
 static uint32_t initializedAutoPoolMask = 0;
+static uint32_t initializedTouchPoolMask = 0;
+static uint32_t autoRandomState = 0xA341316CUL;
+static uint32_t touchRandomState = 0xC8013EA4UL;
 
 static ContextPoolConfig readPoolConfig(
     VibeCategory vibe,
@@ -647,23 +656,103 @@ static ContextPoolConfig readPoolConfig(
     return config;
 }
 
-static uint8_t getPermutationMultiplier(uint16_t capacity) {
-    if (capacity == 120U) return 43U;
-    if (capacity == 100U) return 37U;
-    return 27U; // capacity 80
-}
-
-static uint16_t getPermutationOffset(
-    VibeCategory vibe,
-    ContextPhase phase,
-    uint16_t capacity
-) {
-    uint8_t poolIndex = ((uint8_t)vibe * PHASE_COUNT) + (uint8_t)phase;
-    return ((uint16_t)poolIndex * 17U + 11U) % capacity;
-}
-
 static uint8_t getPoolIndex(VibeCategory vibe, ContextPhase phase) {
     return ((uint8_t)vibe * PHASE_COUNT) + (uint8_t)phase;
+}
+
+static uint32_t mixSeed(uint32_t value) {
+    value ^= value >> 16;
+    value *= 0x7FEB352DUL;
+    value ^= value >> 15;
+    value *= 0x846CA68BUL;
+    value ^= value >> 16;
+    return value == 0 ? 0x6D2B79F5UL : value;
+}
+
+void initMessageRandomization(uint32_t seed) {
+    autoRandomState = mixSeed(seed ^ 0xA341316CUL);
+    touchRandomState = mixSeed(seed ^ 0xC8013EA4UL);
+    memset(autoSelectionCounters, 0, sizeof(autoSelectionCounters));
+    memset(touchSelectionCounters, 0, sizeof(touchSelectionCounters));
+    initializedAutoPoolMask = 0;
+    initializedTouchPoolMask = 0;
+}
+
+static uint32_t nextPermutationRandom(uint32_t& state) {
+    uint32_t value = state;
+    value ^= value << 13;
+    value ^= value >> 17;
+    value ^= value << 5;
+    state = value == 0 ? 0x6D2B79F5UL : value;
+    return state;
+}
+
+static uint8_t greatestCommonDivisor(uint8_t left, uint8_t right) {
+    while (right != 0) {
+        uint8_t remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    return left;
+}
+
+static uint8_t choosePermutationMultiplier(
+    uint8_t capacity,
+    uint8_t setupCount,
+    uint32_t& randomState
+) {
+    uint8_t candidate;
+    uint8_t setupStep;
+    do {
+        candidate = 1U + (nextPermutationRandom(randomState) % (capacity - 1U));
+        setupStep = candidate % setupCount;
+    } while (
+        greatestCommonDivisor(candidate, capacity) != 1U ||
+        setupStep == 1U ||
+        setupStep == setupCount - 1U
+    );
+    return candidate;
+}
+
+static void configurePermutation(
+    uint8_t poolIndex,
+    uint8_t capacity,
+    uint8_t setupCount,
+    uint32_t& randomState,
+    uint8_t multipliers[],
+    uint8_t offsets[],
+    uint8_t lastIndexes[],
+    bool alreadyInitialized
+) {
+    uint8_t oldMultiplier = multipliers[poolIndex];
+    uint8_t oldOffset = offsets[poolIndex];
+    uint8_t multiplier;
+    uint8_t offset;
+
+    do {
+        multiplier = choosePermutationMultiplier(
+            capacity,
+            setupCount,
+            randomState
+        );
+        offset = nextPermutationRandom(randomState) % capacity;
+    } while (
+        alreadyInitialized &&
+        ((multiplier == oldMultiplier && offset == oldOffset) ||
+         offset == lastIndexes[poolIndex])
+    );
+
+    multipliers[poolIndex] = multiplier;
+    offsets[poolIndex] = offset;
+}
+
+static uint16_t applyPermutation(
+    uint16_t counter,
+    uint8_t capacity,
+    uint8_t multiplier,
+    uint8_t offset
+) {
+    return ((uint32_t)multiplier * counter + offset) % capacity;
 }
 
 static uint16_t permuteCombinationIndex(
@@ -672,9 +761,25 @@ static uint16_t permuteCombinationIndex(
     uint16_t counter,
     uint16_t capacity
 ) {
-    uint16_t multiplier = getPermutationMultiplier(capacity);
-    uint16_t offset = getPermutationOffset(vibe, phase, capacity);
-    return ((uint32_t)multiplier * counter + offset) % capacity;
+    uint8_t poolIndex = getPoolIndex(vibe, phase);
+    return applyPermutation(
+        counter,
+        (uint8_t)capacity,
+        autoPermutationMultipliers[poolIndex],
+        autoPermutationOffsets[poolIndex]
+    );
+}
+
+static uint8_t permuteTouchCombinationIndex(
+    uint8_t poolIndex,
+    uint8_t counter
+) {
+    return (uint8_t)applyPermutation(
+        counter,
+        TOUCH_POOL_CAPACITY,
+        touchPermutationMultipliers[poolIndex],
+        touchPermutationOffsets[poolIndex]
+    );
 }
 
 static void initializeAutoPoolIfNeeded(
@@ -682,6 +787,7 @@ static void initializeAutoPoolIfNeeded(
     ContextPhase phase,
     uint8_t contextMinute
 ) {
+    (void)contextMinute;
     uint8_t poolIndex = getPoolIndex(vibe, phase);
     uint32_t poolBit = 1UL << poolIndex;
     if ((initializedAutoPoolMask & poolBit) != 0) return;
@@ -691,7 +797,18 @@ static void initializeAutoPoolIfNeeded(
         phase,
         PERSONALITY_NORMAL
     );
-    autoSelectionCounters[poolIndex] = contextMinute % capacity;
+    ContextPoolConfig config = readPoolConfig(vibe, phase);
+    configurePermutation(
+        poolIndex,
+        (uint8_t)capacity,
+        config.line1Count,
+        autoRandomState,
+        autoPermutationMultipliers,
+        autoPermutationOffsets,
+        autoLastIndexes,
+        false
+    );
+    autoSelectionCounters[poolIndex] = 0;
     initializedAutoPoolMask |= poolBit;
 }
 
@@ -707,29 +824,49 @@ static uint16_t selectAutoCombinationIndex(
         phase,
         PERSONALITY_NORMAL
     );
-    uint16_t combinationIndex = permuteCombinationIndex(
-        vibe,
-        phase,
+    uint16_t combinationIndex = applyPermutation(
         autoSelectionCounters[poolIndex],
-        capacity
+        (uint8_t)capacity,
+        autoPermutationMultipliers[poolIndex],
+        autoPermutationOffsets[poolIndex]
     );
+    autoLastIndexes[poolIndex] = (uint8_t)combinationIndex;
 
     autoSelectionCounters[poolIndex]++;
     if (autoSelectionCounters[poolIndex] >= capacity) {
         autoSelectionCounters[poolIndex] = 0;
+        ContextPoolConfig config = readPoolConfig(vibe, phase);
+        configurePermutation(
+            poolIndex,
+            (uint8_t)capacity,
+            config.line1Count,
+            autoRandomState,
+            autoPermutationMultipliers,
+            autoPermutationOffsets,
+            autoLastIndexes,
+            true
+        );
     }
 
     return combinationIndex;
 }
 
-static uint8_t permuteTouchCombinationIndex(
-    uint8_t poolIndex,
-    uint8_t counter
-) {
-    // 21 is coprime with the 50-message pool, so every combination appears
-    // exactly once before the counter wraps.
-    uint8_t offset = (poolIndex * 19U + 7U) % TOUCH_POOL_CAPACITY;
-    return (21U * counter + offset) % TOUCH_POOL_CAPACITY;
+static void initializeTouchPoolIfNeeded(uint8_t poolIndex) {
+    uint32_t poolBit = 1UL << poolIndex;
+    if ((initializedTouchPoolMask & poolBit) != 0) return;
+
+    configurePermutation(
+        poolIndex,
+        TOUCH_POOL_CAPACITY,
+        TOUCH_SETUP_COUNT,
+        touchRandomState,
+        touchPermutationMultipliers,
+        touchPermutationOffsets,
+        touchLastIndexes,
+        false
+    );
+    touchSelectionCounters[poolIndex] = 0;
+    initializedTouchPoolMask |= poolBit;
 }
 
 static uint8_t selectTouchCombinationIndex(
@@ -737,14 +874,28 @@ static uint8_t selectTouchCombinationIndex(
     ContextPhase phase
 ) {
     uint8_t poolIndex = getPoolIndex(vibe, phase);
-    uint8_t selected = permuteTouchCombinationIndex(
-        poolIndex,
-        touchSelectionCounters[poolIndex]
+    initializeTouchPoolIfNeeded(poolIndex);
+    uint8_t selected = (uint8_t)applyPermutation(
+        touchSelectionCounters[poolIndex],
+        TOUCH_POOL_CAPACITY,
+        touchPermutationMultipliers[poolIndex],
+        touchPermutationOffsets[poolIndex]
     );
+    touchLastIndexes[poolIndex] = selected;
 
     touchSelectionCounters[poolIndex]++;
     if (touchSelectionCounters[poolIndex] >= TOUCH_POOL_CAPACITY) {
         touchSelectionCounters[poolIndex] = 0;
+        configurePermutation(
+            poolIndex,
+            TOUCH_POOL_CAPACITY,
+            TOUCH_SETUP_COUNT,
+            touchRandomState,
+            touchPermutationMultipliers,
+            touchPermutationOffsets,
+            touchLastIndexes,
+            true
+        );
     }
 
     return selected;
@@ -890,48 +1041,61 @@ int validateMessages(MessagePersonality personality) {
     return validCombinations;
 }
 
-static void saveSelectionState(
-    uint16_t savedAutoCounters[VIBE_COUNT * PHASE_COUNT],
-    uint8_t savedTouchCounters[VIBE_COUNT * PHASE_COUNT],
-    uint32_t& savedMask
-) {
-    memcpy(
-        savedAutoCounters,
-        autoSelectionCounters,
-        sizeof(autoSelectionCounters)
-    );
-    memcpy(
-        savedTouchCounters,
-        touchSelectionCounters,
-        sizeof(touchSelectionCounters)
-    );
-    savedMask = initializedAutoPoolMask;
+struct SelectionStateSnapshot {
+    uint16_t autoCounters[VIBE_COUNT * PHASE_COUNT];
+    uint8_t touchCounters[VIBE_COUNT * PHASE_COUNT];
+    uint8_t autoMultipliers[VIBE_COUNT * PHASE_COUNT];
+    uint8_t autoOffsets[VIBE_COUNT * PHASE_COUNT];
+    uint8_t autoLast[VIBE_COUNT * PHASE_COUNT];
+    uint8_t touchMultipliers[VIBE_COUNT * PHASE_COUNT];
+    uint8_t touchOffsets[VIBE_COUNT * PHASE_COUNT];
+    uint8_t touchLast[VIBE_COUNT * PHASE_COUNT];
+    uint32_t autoMask;
+    uint32_t touchMask;
+    uint32_t autoRandom;
+    uint32_t touchRandom;
+};
+
+static void saveSelectionState(SelectionStateSnapshot& saved) {
+    memcpy(saved.autoCounters, autoSelectionCounters, sizeof(autoSelectionCounters));
+    memcpy(saved.touchCounters, touchSelectionCounters, sizeof(touchSelectionCounters));
+    memcpy(saved.autoMultipliers, autoPermutationMultipliers,
+           sizeof(autoPermutationMultipliers));
+    memcpy(saved.autoOffsets, autoPermutationOffsets, sizeof(autoPermutationOffsets));
+    memcpy(saved.autoLast, autoLastIndexes, sizeof(autoLastIndexes));
+    memcpy(saved.touchMultipliers, touchPermutationMultipliers,
+           sizeof(touchPermutationMultipliers));
+    memcpy(saved.touchOffsets, touchPermutationOffsets,
+           sizeof(touchPermutationOffsets));
+    memcpy(saved.touchLast, touchLastIndexes, sizeof(touchLastIndexes));
+    saved.autoMask = initializedAutoPoolMask;
+    saved.touchMask = initializedTouchPoolMask;
+    saved.autoRandom = autoRandomState;
+    saved.touchRandom = touchRandomState;
 }
 
-static void restoreSelectionState(
-    const uint16_t savedAutoCounters[VIBE_COUNT * PHASE_COUNT],
-    const uint8_t savedTouchCounters[VIBE_COUNT * PHASE_COUNT],
-    uint32_t savedMask
-) {
-    memcpy(
-        autoSelectionCounters,
-        savedAutoCounters,
-        sizeof(autoSelectionCounters)
-    );
-    memcpy(
-        touchSelectionCounters,
-        savedTouchCounters,
-        sizeof(touchSelectionCounters)
-    );
-    initializedAutoPoolMask = savedMask;
+static void restoreSelectionState(const SelectionStateSnapshot& saved) {
+    memcpy(autoSelectionCounters, saved.autoCounters, sizeof(autoSelectionCounters));
+    memcpy(touchSelectionCounters, saved.touchCounters, sizeof(touchSelectionCounters));
+    memcpy(autoPermutationMultipliers, saved.autoMultipliers,
+           sizeof(autoPermutationMultipliers));
+    memcpy(autoPermutationOffsets, saved.autoOffsets, sizeof(autoPermutationOffsets));
+    memcpy(autoLastIndexes, saved.autoLast, sizeof(autoLastIndexes));
+    memcpy(touchPermutationMultipliers, saved.touchMultipliers,
+           sizeof(touchPermutationMultipliers));
+    memcpy(touchPermutationOffsets, saved.touchOffsets,
+           sizeof(touchPermutationOffsets));
+    memcpy(touchLastIndexes, saved.touchLast, sizeof(touchLastIndexes));
+    initializedAutoPoolMask = saved.autoMask;
+    initializedTouchPoolMask = saved.touchMask;
+    autoRandomState = saved.autoRandom;
+    touchRandomState = saved.touchRandom;
 }
 
 int testRepetition() {
     int failures = 0;
-    uint16_t savedAutoCounters[VIBE_COUNT * PHASE_COUNT];
-    uint8_t savedTouchCounters[VIBE_COUNT * PHASE_COUNT];
-    uint32_t savedMask;
-    saveSelectionState(savedAutoCounters, savedTouchCounters, savedMask);
+    SelectionStateSnapshot savedState;
+    saveSelectionState(savedState);
 
     for (uint8_t vibe = 0; vibe < VIBE_COUNT; vibe++) {
         for (uint8_t phase = 0; phase < PHASE_COUNT; phase++) {
@@ -949,10 +1113,13 @@ int testRepetition() {
                     testPersonality
                 );
 
-                autoSelectionCounters[poolIndex] = 0;
-                touchSelectionCounters[poolIndex] = 0;
-                initializedAutoPoolMask |= 1UL << poolIndex;
+                if (testPersonality == PERSONALITY_FLIRTY) {
+                    initializedTouchPoolMask &= ~(1UL << poolIndex);
+                } else {
+                    initializedAutoPoolMask &= ~(1UL << poolIndex);
+                }
 
+                uint16_t lastIndex = 0;
                 for (uint16_t selection = 0; selection < capacity; selection++) {
                     uint16_t index = testPersonality == PERSONALITY_FLIRTY
                         ? selectTouchCombinationIndex(testVibe, testPhase)
@@ -962,21 +1129,25 @@ int testRepetition() {
 
                     if ((seen[byteIndex] & bit) != 0) failures++;
                     seen[byteIndex] |= bit;
+                    lastIndex = index;
                 }
+
+                uint16_t firstNextCycle = testPersonality == PERSONALITY_FLIRTY
+                    ? selectTouchCombinationIndex(testVibe, testPhase)
+                    : selectAutoCombinationIndex(testVibe, testPhase, 0);
+                if (firstNextCycle == lastIndex) failures++;
             }
         }
     }
 
-    restoreSelectionState(savedAutoCounters, savedTouchCounters, savedMask);
+    restoreSelectionState(savedState);
     return failures;
 }
 
 int testMessageCycle() {
     int failures = 0;
-    uint16_t savedAutoCounters[VIBE_COUNT * PHASE_COUNT];
-    uint8_t savedTouchCounters[VIBE_COUNT * PHASE_COUNT];
-    uint32_t savedMask;
-    saveSelectionState(savedAutoCounters, savedTouchCounters, savedMask);
+    SelectionStateSnapshot savedState;
+    saveSelectionState(savedState);
 
     for (uint8_t vibe = 0; vibe < VIBE_COUNT; vibe++) {
         for (uint8_t phase = 0; phase < PHASE_COUNT; phase++) {
@@ -1022,7 +1193,6 @@ int testMessageCycle() {
 
     uint8_t anchoredPool = getPoolIndex(EVENING, PHASE_MIDDLE);
     initializedAutoPoolMask &= ~(1UL << anchoredPool);
-    touchSelectionCounters[anchoredPool] = 0;
     uint16_t anchoredIndex;
     Message anchoredMessage;
     selectMessage(
@@ -1036,7 +1206,7 @@ int testMessageCycle() {
     uint16_t expected = permuteCombinationIndex(
         EVENING,
         PHASE_MIDDLE,
-        7,
+        0,
         getMessageCapacity(EVENING, PHASE_MIDDLE, PERSONALITY_NORMAL)
     );
     if (anchoredIndex != expected) failures++;
@@ -1066,7 +1236,7 @@ int testMessageCycle() {
     uint16_t expectedResumed = permuteCombinationIndex(
         EVENING,
         PHASE_MIDDLE,
-        8,
+        1,
         getMessageCapacity(EVENING, PHASE_MIDDLE, PERSONALITY_NORMAL)
     );
     if (resumedIndex != expectedResumed) failures++;
@@ -1074,7 +1244,7 @@ int testMessageCycle() {
     // Required interleaving: A1, T1, T2, A2, A3, T3, A4. Touch must
     // advance only the touch sequence and leave automatic progression intact.
     initializedAutoPoolMask &= ~(1UL << anchoredPool);
-    touchSelectionCounters[anchoredPool] = 0;
+    initializedTouchPoolMask &= ~(1UL << anchoredPool);
     uint16_t autoIndexes[4];
     uint16_t touchIndexes[3];
     selectMessage(EVENING, PHASE_MIDDLE, TRIGGER_STARTUP, 7,
@@ -1101,7 +1271,7 @@ int testMessageCycle() {
         uint16_t expectedAuto = permuteCombinationIndex(
             EVENING,
             PHASE_MIDDLE,
-            7U + index,
+            index,
             autoCapacity
         );
         if (autoIndexes[index] != expectedAuto) failures++;
@@ -1114,6 +1284,6 @@ int testMessageCycle() {
         if (touchIndexes[index] != expectedTouch) failures++;
     }
 
-    restoreSelectionState(savedAutoCounters, savedTouchCounters, savedMask);
+    restoreSelectionState(savedState);
     return failures;
 }

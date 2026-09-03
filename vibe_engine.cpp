@@ -85,6 +85,23 @@ ContextPhase classifyContextPhase(const TimeContext& time, VibeCategory vibe) {
     }
 }
 
+uint8_t getMinuteInContextPhase(
+    const TimeContext& time,
+    VibeCategory vibe,
+    ContextPhase phase
+) {
+    uint16_t startMinutes;
+    uint16_t durationMinutes;
+    getVibeWindowMinutes(vibe, startMinutes, durationMinutes);
+
+    uint16_t phaseDurationMinutes = durationMinutes / 3U;
+    uint16_t phaseStartMinutes =
+        startMinutes + ((uint8_t)phase * phaseDurationMinutes);
+    uint16_t currentMinutes = (time.hour * 60U) + time.minute;
+
+    return (uint8_t)(currentMinutes - phaseStartMinutes);
+}
+
 const char* getVibeName(VibeCategory vibe) {
     switch(vibe) {
         case CURSED_HOURS:   return "CURSED_HOURS";

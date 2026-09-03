@@ -42,7 +42,7 @@ void setup() {
     
     Serial.println(F("================================"));
     Serial.println(F("KALACHAKRAM"));
-    Serial.println(F("V0.5 - TOUCH INTERACTION"));
+    Serial.println(F("V0.6 - MINUTE PERSONALITY"));
     Serial.println(F("================================"));
 
 #if KALACHAKRAM_TEST_MODE
@@ -69,6 +69,7 @@ void loop() {
     TimeContext current = getCurrentTime();
     VibeCategory vibe = classifyVibe(current);
     ContextPhase phase = classifyContextPhase(current, vibe);
+    uint8_t contextMinute = getMinuteInContextPhase(current, vibe, phase);
 
     bool contextChanged = hasSelectedMessage &&
         (vibe != currentVibe || phase != currentPhase);
@@ -82,7 +83,14 @@ void loop() {
         touchRequested
     )) {
         Message msg;
-        selectMessage(vibe, phase, &msg);
+        uint16_t combinationIndex;
+        selectMessage(
+            vibe,
+            phase,
+            contextMinute,
+            &msg,
+            &combinationIndex
+        );
 
         currentVibe = vibe;
         currentPhase = phase;
@@ -101,6 +109,8 @@ void loop() {
         Serial.println(getVibeName(vibe));
         Serial.print(F("PHASE: "));
         Serial.println(getContextPhaseName(phase));
+        Serial.print(F("COMBINATION: "));
+        Serial.println(combinationIndex);
         Serial.println(F("\nMESSAGE:"));
         Serial.println(msg.line1);
         Serial.println(msg.line2);
@@ -315,17 +325,17 @@ void runTests() {
     int msgPass = 0;
     int msgFail = 0;
     
-    Serial.println(F("=== MESSAGE VALIDATION TESTS ==="));
+    Serial.println(F("=== COMPOSITION VALIDATION TESTS ==="));
     int validCount = validateMessages();
     Serial.print(validCount);
-    Serial.println(F(" / 96 messages valid"));
-    if (validCount != 96) msgFail++;
+    Serial.println(F(" / 2340 combinations valid"));
+    if (validCount != 2340) msgFail++;
     else msgPass++;
     
     int totalCount = countMessages();
-    Serial.print(F("Total messages: "));
+    Serial.print(F("Total combinations: "));
     Serial.println(totalCount);
-    if (totalCount != 96) msgFail++;
+    if (totalCount != 2340) msgFail++;
     else msgPass++;
     
     Serial.println(F("\n=== REPEAT PREVENTION TESTS ==="));
@@ -380,7 +390,7 @@ void runTests() {
     if (schedulerFailures > 0) msgFail++;
     else msgPass++;
     
-    Serial.println(F("\n=== V0.5 RESULT ==="));
+    Serial.println(F("\n=== V0.6 RESULT ==="));
     Serial.print(msgPass);
     Serial.println(F(" PASSED"));
     Serial.print(msgFail);

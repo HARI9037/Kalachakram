@@ -22,6 +22,11 @@ enum ContextPhase {
 
 VibeCategory classifyVibe(const TimeContext& time);
 ContextPhase classifyContextPhase(const TimeContext& time, VibeCategory vibe);
+uint8_t getMinuteInContextPhase(
+    const TimeContext& time,
+    VibeCategory vibe,
+    ContextPhase phase
+);
 
 const char* getVibeName(VibeCategory vibe);
 const char* getContextPhaseName(ContextPhase phase);

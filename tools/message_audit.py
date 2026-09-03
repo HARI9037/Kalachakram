@@ -43,6 +43,7 @@ CONTEXT_BOUNDARIES_SECONDS = tuple(
     )
 )
 TOUCH_SETUP_COUNT = 3
+TOUCH_REACTIONS_PER_VIBE = 4
 TOUCH_CAPACITY = 12
 
 
@@ -126,9 +127,10 @@ def pair_from_touch_index(
     reactions: list[str],
 ) -> tuple[str, str]:
     offset = pool_index * TOUCH_SETUP_COUNT
+    reaction_offset = (pool_index // 3) * TOUCH_REACTIONS_PER_VIBE
     return (
         setups[offset + combination % TOUCH_SETUP_COUNT],
-        reactions[combination // TOUCH_SETUP_COUNT],
+        reactions[reaction_offset + combination // TOUCH_SETUP_COUNT],
     )
 
 
@@ -205,13 +207,19 @@ def outputs_by_pool(
             ]
         )
         touch_offset = pool_index * TOUCH_SETUP_COUNT
+        touch_reaction_offset = (
+            (pool_index // 3) * TOUCH_REACTIONS_PER_VIBE
+        )
         touch_pools.append(
             [
                 (line1, line2)
                 for line1 in touch_setups[
                     touch_offset : touch_offset + TOUCH_SETUP_COUNT
                 ]
-                for line2 in touch_reactions
+                for line2 in touch_reactions[
+                    touch_reaction_offset :
+                    touch_reaction_offset + TOUCH_REACTIONS_PER_VIBE
+                ]
             ]
         )
     return auto_pools, touch_pools
@@ -251,8 +259,8 @@ def main() -> int:
         errors.append(f"Expected 24 pool configs, found {len(configs)}")
     if len(touch_setups) != 72:
         errors.append(f"Expected 72 touch setups, found {len(touch_setups)}")
-    if len(touch_reactions) != 4:
-        errors.append(f"Expected 4 touch reactions, found {len(touch_reactions)}")
+    if len(touch_reactions) != 32:
+        errors.append(f"Expected 32 touch reactions, found {len(touch_reactions)}")
 
     auto_pools, touch_pools = outputs_by_pool(
         configs,
@@ -341,51 +349,50 @@ def main() -> int:
     awkward_touch = [
         pair for pair in touch_outputs if "MISS" in pair[0] and "MISS" in pair[1]
     ]
-    manglish_markers = (
-        "AANO",
-        "AANALLO",
-        "AAYO",
-        "AAYALLE",
-        "AAK",
-        "AAKUM",
-        "ATHU",
-        "ALLE",
-        "CHEY",
-        "CHEYTHO",
-        "ENTHA",
-        "IL",
-        "ITHU",
-        "IVDE",
-        "KANDU",
-        "KATHA",
-        "KETTO",
-        "MATHI",
-        "NALE",
-        "NALLA",
-        "NJAN",
-        "NOK",
-        "NOKKAM",
-        "NOKKU",
-        "PANI",
-        "PARAYUM",
-        "PINNE",
-        "POYI",
-        "SAMAYAM",
-        "SCENE",
-        "SHERI",
-        "THANNE",
-        "URAKKAM",
-        "VARUM",
-        "VERUTHE",
-        "VEE",
-        "VEND",
-        "VITT",
+    setup_manglish_markers = (
+        "AAK", "AANO", "AAY", "ADUTHU", "ALLE", "BAAKI", "CHAYA",
+        "CHINTHA", "CHODIK", "CHUMMA", "DHOORAM", "ENTHA", "ETHI",
+        "DESKIL", "ENTHINA", "ETHARAYI", "EVDE", "EZHUNNETTU", "INNU", "INI",
+        "IPPOZHUM", "IRUNNO", "IRUT", "IVDE", "JAYICHU", "KAATH",
+        "KAIVITTU", "KAND", "KANN", "KASHTAM", "KAZHI", "KITT",
+        "KAIVIDUNNU", "KULAM", "MADUTHU", "MANGUNNU", "MARANNO", "MATHI", "MAYAKKAM",
+        "MOSHAM", "MUDIYO", "NADAK", "NALLA",
+        "NALE", "NERATHE", "NIRTHI", "NOK", "ONNUM", "ORMA", "PANI", "PINNE",
+        "POK", "POLE", "POLIYUNNU", "POY", "RAAVILE", "RAKSHAYILLA",
+        "RATHRI", "READYANO",
+        "THEER", "THANNE", "THUDANG", "THURANNU", "UCHAYA", "UCHAYIL", "UNDA", "UNDO", "UNDU",
+        "URAKK", "URANG", "VALIYUNNU", "VAR", "VAYAR", "VAYYA", "VEND",
+        "VENAM", "VENO", "VIDUNNILLA", "VIDUNNO", "VILIKK", "VISHAPPU", "VISHANNU",
+        "VITT", "VANN", "VAIKUNNERAM",
     )
-    non_manglish_outputs = [
-        pair
-        for pair in auto_outputs + touch_outputs
-        if not any(marker in f"{pair[0]} {pair[1]}" for marker in manglish_markers)
+    english_heavy_auto_setups = [
+        setup
+        for setup in auto_setups
+        if not any(marker in setup for marker in setup_manglish_markers)
     ]
+    forbidden_phrases = (
+        "DEFINITELY PM",
+        "WORK DRIVE LEFT",
+        "DAY RUNNING OUT",
+        "PILLOW VITTALLO",
+        "SIX AAKUNNO",
+    )
+    forbidden_phrase_hits = [
+        fragment
+        for fragment in fragments
+        if any(phrase in fragment for phrase in forbidden_phrases)
+    ]
+    vee_fragments = [
+        fragment for fragment in fragments if re.search(r"\bVEE\b", fragment)
+    ]
+    exact_time_pattern = re.compile(
+        r"(?:\b\d{1,2}\s*(?:AM|PM)\b|\b\d{1,2}:\d{2}\b|\b(?:AM|PM)\b)",
+        re.IGNORECASE,
+    )
+    exact_time_leaks = [
+        fragment for fragment in fragments if exact_time_pattern.search(fragment)
+    ]
+    unique_touch_reactions = len(set(touch_reactions))
 
     if overlong:
         errors.append(f"Overlong fragments: {overlong}")
@@ -409,9 +416,19 @@ def main() -> int:
         errors.append(f"Unsafe TOUCH terms: {unsafe_touch}")
     if awkward_touch:
         errors.append(f"Awkward repeated-MISS TOUCH pairs: {awkward_touch}")
-    if non_manglish_outputs:
+    if english_heavy_auto_setups:
         errors.append(
-            f"Outputs without a Manglish marker: {len(non_manglish_outputs)}"
+            f"English-heavy AUTO setups: {english_heavy_auto_setups}"
+        )
+    if forbidden_phrase_hits:
+        errors.append(f"Forbidden awkward phrases: {forbidden_phrase_hits}")
+    if vee_fragments:
+        errors.append(f"Unnatural VEE fragments: {vee_fragments}")
+    if exact_time_leaks:
+        errors.append(f"Exact-time leaks: {exact_time_leaks}")
+    if unique_touch_reactions < 24:
+        errors.append(
+            f"Insufficient TOUCH reaction variety: {unique_touch_reactions} unique"
         )
 
     tested_starts = 0
@@ -507,7 +524,11 @@ def main() -> int:
     print(f"Flirty/touch AUTO fragments: {len(flirty_auto)}")
     print(f"Unsafe TOUCH fragments: {len(unsafe_touch)}")
     print(f"Awkward repeated-MISS TOUCH pairs: {len(awkward_touch)}")
-    print(f"Outputs without a Manglish marker: {len(non_manglish_outputs)}")
+    print(f"English-heavy AUTO setup fragments: {len(english_heavy_auto_setups)}")
+    print(f"Forbidden awkward phrase hits: {len(forbidden_phrase_hits)}")
+    print(f"Unnatural VEE fragments: {len(vee_fragments)}")
+    print(f"Exact-time leaks: {len(exact_time_leaks)}")
+    print(f"Unique TOUCH reaction fragments: {unique_touch_reactions}")
     print(f"24-hour boot-time simulations: {tested_starts}")
     print(f"Selections per simulated day: {minimum_day_selections}..{maximum_day_selections}")
     print(f"24-hour simulations with AUTO repeats: {duplicate_day_runs}")

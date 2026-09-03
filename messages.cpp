@@ -6,9 +6,9 @@ static const uint8_t VIBE_COUNT = 8;
 static const uint8_t PHASE_COUNT = 3;
 static const uint8_t AUTO_REACTION_COUNT = 10;
 static const uint8_t TOUCH_SETUP_COUNT = 3;
-static const uint8_t TOUCH_REACTION_COUNT = 4;
+static const uint8_t TOUCH_REACTIONS_PER_VIBE = 4;
 static const uint8_t TOUCH_POOL_CAPACITY =
-    TOUCH_SETUP_COUNT * TOUCH_REACTION_COUNT;
+    TOUCH_SETUP_COUNT * TOUCH_REACTIONS_PER_VIBE;
 static const uint8_t MAX_POOL_BYTES = 15; // 120 combinations / 8
 
 struct ContextPoolConfig {
@@ -21,286 +21,286 @@ struct ContextPoolConfig {
 // therefore cannot create duplicate complete messages across contexts.
 const char contextLine1Fragments[][17] PROGMEM = {
     // CURSED_HOURS / EARLY (12)
-    "THIS HOUR",
-    "NOTHING GOOD NOW",
-    "MIDNIGHT PASSED.",
-    "NIGHT JUST BEGAN",
-    "BAD IDEAS AWAKE",
-    "CLOCK SAW THAT",
-    "SLEEP LEFT EARLY",
-    "DARKNESS IS IN",
-    "DAWN IS NOWHERE",
-    "CHOSE MIDNIGHT",
-    "NIGHT HAS NOTES",
-    "TIME GOT CURSED",
+    "ENTHINA AWAKE?",
+    "RATHRI AAYALLO",
+    "URAKKAM EVDE?",
+    "IPPO ENTHA?",
+    "IRUTTIL SCENE?",
+    "BED MARANNO?",
+    "RATHRI THUDANGI",
+    "CHUMMA IRUNNO?",
+    "MIND OFF AAKKU",
+    "DAWN DHOORAM",
+    "TIME KULAMAYI",
+    "INI URANGAM",
 
     // CURSED_HOURS / MIDDLE (12)
-    "WHY STILL AWAKE?",
-    "SLEEP IS A THING",
-    "STILL NIGHT.",
-    "CLOCK IS AWAKE",
-    "NIGHT WON'T END",
-    "DREAMS FILED OFF",
-    "PILLOW WAITING",
-    "2AM QUESTIONS",
-    "REST MODE FAILED",
-    "MOON IS JUDGING",
-    "LATE GOT LATER",
-    "MIND IS ONLINE",
+    "URANGIYILLE?",
+    "ITHUVARE AWAKE?",
+    "URAKKAM VENDAYO?",
+    "MIND ONLINE AAYI",
+    "BED VILIKKUNNU",
+    "CHINTHA MATHI",
+    "RATHRI NEELUNNU",
+    "REST EVIDE POYI?",
+    "PILLOW NOKKUNNU",
+    "MOON JUDGE AAKI",
+    "LATE AAKUNNU",
+    "INIYUM SCENE?",
 
     // CURSED_HOURS / LATE (12)
-    "GO TO BED.",
-    "LOG OFF.",
-    "DAWN IS CLOSE.",
-    "MORNING SOON.",
-    "NIGHT SHIFT LOST",
-    "SLEEP DEADLINE",
-    "SUN WARMING UP",
-    "REGRET INBOUND",
-    "LAST DARK HOUR",
-    "BED STILL EXISTS",
-    "DAWN FOUND YOU",
-    "NIGHT IS EXPIRED",
+    "INI BEDIL PO",
+    "DAWN VARARAYI",
+    "RATHRI THEERUM",
+    "LOG OFF AAKKU",
+    "URAKKAM DEADLINE",
+    "REGRET VARUNNU",
+    "SUN READY AAYI",
+    "IRUTTU BAAKI",
+    "BED INNUM UNDU",
+    "DAWN KANDALLO",
+    "NIGHT KAZHINJU",
+    "INI RAKSHAYILLA",
 
     // TOO_EARLY / EARLY (10)
-    "TOO EARLY.",
-    "EARLY MISTAKES",
-    "DAWN ARRIVED.",
-    "RUDE DAWN ENTRY",
-    "COFFEE NOT FOUND",
-    "SUN HIT START",
-    "ALARM WON AGAIN",
-    "MORNING ATTACKS",
-    "EYES HALF CLOSED",
-    "WAKE MODE WAITS",
+    "ITHRA NERATHE?",
+    "DAWN VANNALLO",
+    "ALARM JAYICHU",
+    "COFFEE EVDE?",
+    "SUN START AAKI",
+    "KANN THURANNILLA",
+    "RAAVILE SCENE",
+    "WAKE MODE VARUM",
+    "URAKKAM BAAKI",
+    "DAY THUDANGI",
 
     // TOO_EARLY / MIDDLE (10)
-    "MORNING?",
-    "COFFEE FIRST.",
-    "MORNING EXISTS.",
-    "COFFEE WINDOW.",
-    "BRAIN BOOTING",
-    "SUN IS TOO LOUD",
-    "WAKEUP BUFFERING",
-    "DAY NEEDS COFFEE",
-    "EYELIDS BARGAIN",
-    "ALARM AFTERMATH",
+    "RAAVILE THANNE?",
+    "COFFEE AAYO?",
+    "BRAIN BOOT AAYO?",
+    "SUN LOUD ALLE?",
+    "KANNINNU VAYYA",
+    "DAYKKU CHAYA?",
+    "ALARM POYILLE?",
+    "WAKEUP AAYILLA",
+    "CHAYA KITTUMO?",
+    "MORNING KASHTAM",
 
     // TOO_EARLY / LATE (10)
-    "SUN IS UP.",
-    "BARELY AWAKE.",
-    "ALMOST AWAKE.",
-    "EARLY IS ENDING.",
-    "COFFEE WORKED?",
-    "BRAIN HAS SIGNAL",
-    "MORNING CALMED",
-    "EYES ONLINE NOW",
-    "DAWN NEARLY DONE",
-    "DAY MODE LOADING",
+    "SUN VANNALLO",
+    "IPPOZHUM SLEEPY?",
+    "COFFEE SET AAYO?",
+    "BRAIN OK AAYO?",
+    "KANN OPEN AAYI?",
+    "DAWN KAZHIYUNNU",
+    "DAY MODE AAKATTE",
+    "URAKKAM VIDUNNO?",
+    "MORNING SET AAYI",
+    "INI PANI NOKKAM",
 
     // MORNING / EARLY (10)
-    "DAY STARTED.",
-    "MORNING-ISH.",
-    "MORNING IS HERE.",
-    "EMAILS AWAKEN.",
-    "WORKDAY BOOTING",
-    "INBOX HAS RISEN",
-    "TASKS SAY HELLO",
-    "FOCUS REQUESTED",
-    "DESK MODE ACTIVE",
-    "TODAY STARTED",
+    "DAY THUDANGIYO?",
+    "MORNING AAYALLO",
+    "EMAIL VANNALLO",
+    "WORK BOOT AAKKU",
+    "INBOX EZHUNNETTU",
+    "TASKS VILIKKUNNU",
+    "FOCUS VARUMO?",
+    "DESKIL IRUNNO?",
+    "INNU THUDANGI",
+    "PANI READY AANO?",
 
     // MORNING / MIDDLE (10)
-    "PRODUCTIVITY",
-    "DOING THINGS?",
-    "DAY IN PROGRESS.",
-    "TASKS EXIST.",
-    "WORK LOOKS REAL",
-    "INBOX WANTS MORE",
-    "FOCUS OPTIONAL",
-    "MEETING DETECTED",
-    "BUSY LOOK READY",
-    "DEADLINES HOVER",
+    "PANI NADAKKUNNO?",
+    "PRODUCTIVE AANO?",
+    "TASKS THEERNO?",
+    "INBOX PINNE?",
+    "FOCUS VENO?",
+    "MEETING AAYALLO",
+    "BUSY ACT AANO?",
+    "DEADLINE VARUNNU",
+    "WORK REAL AANO?",
+    "CHUMMA BUSY?",
 
     // MORNING / LATE (10)
-    "PRETEND TO WORK",
-    "STILL MORNING.",
-    "NOON IS NEARBY.",
-    "MORNING ENDING.",
-    "WORK FACE ON",
-    "LUNCH THOUGHTS",
-    "FOCUS SIGNED OUT",
-    "INBOX IS HUNGRY",
-    "NOON EYES YOU",
-    "TASKS, THEN FOOD",
+    "PANI POLE ACT",
+    "MORNING INNUM?",
+    "UCHAYA VARARAYI",
+    "LUNCH ORMA UNDO?",
+    "FOCUS KAZHINJU",
+    "INBOX VISHANNU",
+    "NOON NOKKUNNU",
+    "TASKS NALE MATHI",
+    "WORK ACT MATHI",
+    "FOOD ORMA AAYI",
 
     // LUNCH_LOADING / EARLY (8)
-    "LUNCH IS COMING",
-    "FOOD SOON.",
-    "HUNGER ONLINE.",
-    "LUNCH DETECTED.",
-    "SNACK RADAR ON",
-    "STOMACH ONLINE",
-    "FOCUS GETS SHAKY",
-    "NOON FEELS CLOSE",
+    "LUNCH VARUNNU",
+    "VISHAPPU AAYO?",
+    "FOOD ORMA VANNO?",
+    "SNACK NOKKUNNO?",
+    "VAYAR ONLINE",
+    "FOCUS KULAMAYI",
+    "LUNCH ADUTHU",
+    "INI KAZHIKKAM",
 
     // LUNCH_LOADING / MIDDLE (8)
-    "WORK CAN WAIT.",
-    "FOCUS FADING.",
-    "FOOD THOUGHTS.",
-    "CLOCK SAYS SNACK",
-    "HUNGER HAS PLANS",
-    "LUNCH TAB OPEN",
-    "BRAIN WANTS FOOD",
-    "NOON IS TEASING",
+    "PANI PINNE MATHI",
+    "FOCUS POYALLO",
+    "FOOD CHINTHA",
+    "SNACK TIME AAYO?",
+    "VISHAPPU UNDO?",
+    "LUNCH TAB AAYI",
+    "BRAIN FOOD VENAM",
+    "UCHAYA SCENE",
 
     // LUNCH_LOADING / LATE (8)
-    "PRE-LUNCH STAGE.",
-    "ESSENTIALLY NOON",
-    "ALMOST LUNCH.",
-    "WORK FOCUS LEFT",
-    "FORKS ON STANDBY",
-    "SNACKS FEEL NEAR",
-    "WORK TASTES ODD",
-    "HUNGER WON THIS",
+    "LUNCH READYANO?",
+    "UCHAYA AAYALLO",
+    "FOOD ETHARAYI",
+    "PANI FOCUS POYI",
+    "FORK READY AANO?",
+    "SNACK ADUTHU",
+    "WORK MOSHAM AAYI",
+    "VISHAPPU JAYICHU",
 
     // AFTERNOON / EARLY (10)
-    "DEFINITELY PM",
-    "LUNCH IS GONE.",
-    "LUNCH AFTERMATH.",
-    "DAY CONTINUES.",
-    "POST-LUNCH MODE",
-    "ENERGY ATE LUNCH",
-    "DESK FEELS HEAVY",
-    "NOON LEFT CRUMBS",
-    "WORK RESUMED?",
-    "NAP IDEA FOUND",
+    "UCHAYA KAZHINJU",
+    "LUNCH KAZHINJO?",
+    "LUNCH MAYAKKAM",
+    "DAY INIYUM UNDU",
+    "ENERGY KAZHINJU",
+    "DESK HEAVY AAYI",
+    "FOOD EFFECT AANO",
+    "PANI THUDANGIYO?",
+    "NAP ORMA VANNO?",
+    "INIYUM PANI UNDU",
 
     // AFTERNOON / MIDDLE (10)
-    "WORK ENERGY LOW",
-    "LONG SLUMP BEGUN",
-    "AFTERNOON HUM.",
-    "BATTERY IS SAD",
-    "ENERGY LEFT?",
-    "CLOCK MOVES SLOW",
-    "DESK GRAVITY",
-    "NAP TAB OPEN",
-    "FOCUS TOOK LEAVE",
-    "PM FEELS STICKY",
+    "ENERGY EVDE?",
+    "SLUMP THUDANGI",
+    "BATTERY SAD AAYI",
+    "CLOCK SLOW AANO?",
+    "DESK VIDUNNILLA",
+    "NAP TAB THURANNU",
+    "FOCUS LEAVE AAYI",
+    "UCHAKKU VAYYA",
+    "PANI SLOW AAYI",
+    "DAY STUCK AAYO?",
 
     // AFTERNOON / LATE (10)
-    "STILL HERE?",
-    "AFTERNOON GLITCH",
-    "EVENING LOADING.",
-    "WORKDAY FADING.",
-    "CLOCK DRAGS FEET",
-    "ENERGY SAID BYE",
-    "SUN LOOKS TIRED",
-    "TASKS LOSE GRIP",
-    "ESCAPE IS CLOSE",
-    "DESK TIME WILTS",
+    "IPPOZHUM IVDE?",
+    "UCHAYIL GLITCH",
+    "EVENING VARUNNU",
+    "WORKDAY MANGUNNU",
+    "CLOCK VALIYUNNU",
+    "ENERGY POYALLO",
+    "SUN TIRED AAYI",
+    "TASKS KAIVITTU",
+    "ESCAPE ADUTHU",
+    "DESK PANI THEERU",
 
     // DAY_IS_DYING / EARLY (8)
-    "DAY RUNNING OUT",
-    "WORK DRIVE LEFT",
-    "DAY LOSING GRIP",
-    "AFTERNOON EXIT.",
-    "SUN CHECKED OUT",
-    "WORKDAY CRACKING",
-    "CLOCK LEANS HOME",
-    "DAYLIGHT RESIGNS",
+    "DAY THEERARAYI",
+    "PANI ENERGY POYI",
+    "DAY KAIVIDUNNU",
+    "UCHAYA POKUNNU",
+    "SUN PANI NIRTHI",
+    "WORK THEERARAYI",
+    "VEEDU VILIKKUM",
+    "VELICHAM POYI",
 
     // DAY_IS_DYING / MIDDLE (8)
-    "ALMOST EVENING.",
-    "FINISH UP.",
-    "EVENING NEARBY.",
-    "SUN DONE WORKING",
-    "DEADLINES BLINK",
-    "WORK MASK SLIPS",
-    "HOME MODE CALLS",
-    "DAY PACKS A BAG",
+    "EVENING ADUTHU",
+    "PANI THEERKKU",
+    "VAIKUNNERAM ETHI",
+    "SUN DONE AAYI",
+    "DEADLINE NOKKO?",
+    "WORK MASK POYI",
+    "HOME MODE VARUM",
+    "DAY POKAN ORUNGI",
 
     // DAY_IS_DYING / LATE (8)
-    "BASICALLY SIX.",
-    "SUNSET INCOMING.",
-    "CLOCK SAYS WRAP",
-    "DAY ALMOST OVER.",
-    "WORKDAY EXHALES",
-    "SUN CLOCKS OUT",
-    "EVENING AT DOOR",
-    "TASKS CAN WAIT",
+    "DAY KAZHIYARAYI",
+    "SUNSET VARARAYI",
+    "WRAP AAKKAM",
+    "DAY THEERUM IPPO",
+    "WORKDAY VITTU",
+    "SUN PANI THEERNU",
+    "EVENING ETHI",
+    "BAAKI NALE MATHI",
 
     // EVENING / EARLY (10)
-    "EVENING-ISH.",
-    "DAY IS OVER.",
-    "EVENING STARTED.",
-    "DAY IS ENDING.",
-    "WORK MODE FADING",
-    "FREE TIME BOOTS",
-    "SUNSET ARRIVED",
-    "PLANS LOOK REAL",
-    "CLOCK GOT SOFT",
-    "NIGHT KNOCKS",
+    "EVENING AAYALLO",
+    "DAY KAZHINJU",
+    "VAIKUNNERAM AAYI",
+    "PANI MODE OFF",
+    "FREE TIME AAYI",
+    "SUNSET VANNALLO",
+    "PLANS UNDO?",
+    "CLOCK SOFT AAYI",
+    "NIGHT VARUNNU",
+    "CHILL AAKATTE",
 
     // EVENING / MIDDLE (10)
-    "WORK?",
-    "FREE TIME.",
-    "DINNER MAYBE.",
-    "FREE TIME FOUND.",
-    "PLANS PENDING",
-    "COUCH MODE ON",
+    "PANIYOKKE?",
+    "FREE AAYALLE?",
+    "DINNER AAYO?",
+    "TIME FREE AAYI",
+    "PLANS ENTHAYI?",
+    "COUCH MODE AAKI",
     "WORK MUDIYO?",
     "PLAN ONNUM ILLE?",
-    "EVENING PLAN?",
-    "COUCH READYANO?",
+    "PLAN UNDO IPPO?",
+    "COUCH SET AAYO?",
 
     // EVENING / LATE (10)
-    "NIGHT MODE",
-    "RELAX.",
-    "EVENING'S GONE.",
-    "NIGHT HAS IDEAS",
-    "COUCH WON AGAIN",
-    "PLANS GOT SLEEPY",
-    "MOON TOOK OVER",
-    "FREE TIME FADING",
-    "LATE LOOKS GOOD",
-    "BEDROOM CALLING",
+    "NIGHT MODE AAYI",
+    "RELAX AAKKU",
+    "EVENING POYALLO",
+    "NIGHT IDEA UNDU",
+    "COUCH JAYICHU",
+    "PLANS URANGI",
+    "MOON VANNALLO",
+    "FREE TIME POYI",
+    "LATE NALLA SCENE",
+    "BED CALL VARUNNU",
 
     // GO_TO_BED / EARLY (10)
-    "TOMORROW IS NEAR",
-    "LATE ENOUGH.",
-    "BEDTIME NEARBY.",
-    "NIGHT STARTED.",
-    "BEDTIME WINDOW",
-    "PILLOW SENT PING",
-    "YAWN MODE ACTIVE",
-    "TOMORROW KNOCKS",
-    "NIGHT LIGHTS DIM",
-    "REST IS TRENDING",
+    "NALE ADUTHU",
+    "LATE AAYALLO",
+    "BEDTIME VARUNNU",
+    "NIGHT THUDANGI",
+    "BED TIME AAKUNNU",
+    "PILLOW PING AAKI",
+    "YAWN MODE AAYI",
+    "NALE VILIKKUNNU",
+    "LIGHT DIM AAYI",
+    "REST MODE AAYI",
 
     // GO_TO_BED / MIDDLE (10)
-    "WHY ARE YOU HERE",
-    "SLEEP EXISTS.",
-    "SLEEP WAITS",
-    "TOMORROW WAITS.",
-    "BED ASKS WHY",
-    "EYELIDS VOTING",
-    "NIGHT GETS LATE",
-    "PILLOW IS ONLINE",
-    "DREAMS WANT YOU",
-    "CLOCK WANTS REST",
+    "INNUM IVDE?",
+    "SLEEP UNDALLO",
+    "URAKKAM KAATHU",
+    "NALE WAIT AAKUM",
+    "BED CHODIKKUNNU",
+    "KANN ADAYUNNU",
+    "NIGHT LATE AAYI",
+    "PILLOW READYANO?",
+    "DREAMS VILIKKUM",
+    "CLOCK REST VENAM",
 
     // GO_TO_BED / LATE (10)
-    "GO TO BED NOW",
-    "DAY IS EXPIRED.",
-    "MIDNIGHT NEARS.",
-    "LAST CALL.",
-    "BED DEADLINE",
-    "TOMORROW LOOMS",
-    "NIGHT WON'T WAIT",
-    "PILLOW CALLS",
-    "CLOCK HAS HAD IT",
-    "LATE GOT ABSURD"
+    "INI BEDIL POKU",
+    "DAY KAZHINJALLO",
+    "RATHRI PEAK AAYI",
+    "LAST CALL AAYI",
+    "BED TIME AAYI",
+    "NALE VARUNNU",
+    "NIGHT KAATHILLA",
+    "PILLOW VILIKKUM",
+    "CLOCK MADUTHU",
+    "LATE OVER AAYI"
 };
 
 // Automatic reactions keep every non-touch output sarcastic and Manglish,
@@ -322,19 +322,19 @@ const char reactionLine2Fragments[][17] PROGMEM = {
 // unique, and every setup is compatible with every playful reaction below.
 const char touchLine1Fragments[][17] PROGMEM = {
     // CURSED_HOURS
-    "RATHRIYIL VEE?", "MIDNIGHT TOUCH?", "URAKKAM POYO?",
-    "2AM-IL VEE?", "NIGHTIL ENTHA?", "SLEEP VITTALLO?",
-    "DAWN VARE VEE?", "BED VENDAYO?", "AWAKE THANNEYO?",
+    "RATHRIYIL ENTHA?", "RATHRIYUM TOUCH?", "URAKKAM POYO?",
+    "IRUTTIL ENTHA?", "NIGHTIL NOKKO?", "SLEEP VITTALLO?",
+    "DAWN VARE NOKKO?", "BED VENDAYO?", "AWAKE THANNEYO?",
 
     // TOO_EARLY
-    "RAAVILE THANNE?", "DAWN-IL TOUCH?", "ALARM KAZHINJO?",
+    "RAAVILE THANNE?", "DAWNIL TOUCH?", "ALARM KAZHINJO?",
     "COFFEEKKU MUNPE?", "MORNING TOUCH?", "KANN THURANNO?",
     "SUN UP AAYALLE?", "COFFEE KITTIO?", "EARLYIL ENTHA?",
 
     // MORNING
-    "WORKINU MUNPE?", "MORNINGIL VEE?", "INBOX VITTALLO?",
+    "WORKINU MUNPE?", "MORNINGIL NOKKO?", "INBOX VITTALLO?",
     "WORK BOR AAYO?", "CLASSIL TOUCH?", "FOCUS POYO?",
-    "LUNCHINU MUNPE?", "WORK VITTU VEE?", "NOON WAIT AANO?",
+    "LUNCHINU MUNPE?", "WORK VIDU NOKKU", "NOON WAIT AANO?",
 
     // LUNCH_LOADING
     "FOODINU MUNPE?", "LUNCH WAIT AAYO?", "HUNGERIL TOUCH?",
@@ -342,31 +342,74 @@ const char touchLine1Fragments[][17] PROGMEM = {
     "LUNCH READYANO?", "PLATE NOKKUNNO?", "FOOD VANNILLE?",
 
     // AFTERNOON
-    "LUNCH KAZHINJO?", "NAPINU MUNPE?", "PM-IL ENNEYO?",
+    "LUNCH KAZHINJO?", "NAPINU MUNPE?", "UCHAYIL ENNEYO?",
     "BORED AAYO?", "NAP VENDAYO?", "WORK SLOW AANO?",
     "ESCAPE NOKKUNNO?", "EVENING WAIT?", "WORK MUDIYO?",
 
     // DAY_IS_DYING
     "HOME POKANDE?", "SUNSET TOUCH?", "DAY TIRED AAYO?",
-    "EVENING VEE?", "WORK VITTALLO?", "HOME MODE AAYO?",
-    "SIX AAKUNNO?", "SUNSET NOKKUNNO?", "DAY BYE AAYO?",
+    "VAIKUNNERAMO?", "WORK VITTALLO?", "HOME MODE AAYO?",
+    "EVENING AAYO?", "SUNSET NOKKUNNO?", "DAY BYE AAYO?",
 
     // EVENING
-    "PLAN ILLALLE?", "EVENINGIL VEE?", "SUNSETIL VEE?",
+    "PLAN ILLALLE?", "EVENINGIL ENTHA?", "SUNSETIL NOKKO?",
     "VEENDUM VANNO?", "ENNE NOKKUNNO?", "FREE AAYALLE?",
     "NIGHT PLAN ILLE?", "COUCH VITTALLO?", "LATEIL ENTHA?",
 
     // GO_TO_BED
     "SLEEP VENDA?", "BEDTIME TOUCH?", "NIGHTIL ENNEYO?",
-    "URANGANILLE?", "PILLOW VITTALLO?", "VEENDUM NIGHTIL?",
-    "MIDNIGHT MUNPE?", "SLEEP POYO?", "LAST TOUCH AANO?"
+    "URANGANILLE?", "PILLOWO NJANO?", "NIGHTIL VEENDUM?",
+    "RATHRI THEERUMO?", "SLEEP POYO?", "LAST TOUCH AANO?"
 };
 
 const char touchReactionLine2Fragments[][17] PROGMEM = {
-    "MISS CHEYTHO?",
-    "CUTE AANALLO.",
+    // CURSED_HOURS
+    "ENNE ORTHALLO.",
+    "NJAN KANDU KETTO",
+    "IPPO CUTE AANO?",
+    "IPPO POKANDA.",
+
+    // TOO_EARLY
+    "ENNEYUM NOKKIYO?",
+    "CHIRI VANNALLO.",
+    "KANNIL NJANANO?",
+    "ITHRA CARE AANO?",
+
+    // MORNING
+    "PANIYO NJANO?",
+    "ENNE NOKKIYO?",
+    "CUTE AANU KETTO",
+    "FOCUS NJAN AANO?",
+
+    // LUNCH_LOADING
+    "NJAN MATHI ALLE?",
+    "ENNE EDUTHO?",
+    "CHIRIYUM VENAM.",
     "NJAN IVDE UNDU.",
-    "SHY AAKUM KETTO."
+
+    // AFTERNOON
+    "BORE MAATTAM.",
+    "ENNE ORMA VANNO?",
+    "CHUMMA NOKKALLE.",
+    "NJAN READY AANU.",
+
+    // DAY_IS_DYING
+    "POKALLE IPPO.",
+    "NJAN KOODE UNDU.",
+    "ITHRA CUTE AANO?",
+    "VEENDUM VARILLE?",
+
+    // EVENING
+    "PLAN NJAN AAKAM.",
+    "MISS AAYO KETTO?",
+    "NOKKI IRUNNO.",
+    "CHIRI MATHI.",
+
+    // GO_TO_BED
+    "NJAN UNDALLO.",
+    "DREAMIL VARATTE?",
+    "POKALLE KETTO.",
+    "GOOD NIGHT KETTO"
 };
 
 // {line1 offset, line1 count, phase duration in minutes}
@@ -567,9 +610,11 @@ void selectMessage(
         uint8_t line2Index = selected / TOUCH_SETUP_COUNT;
         uint16_t globalLine1Index =
             ((uint16_t)poolIndex * TOUCH_SETUP_COUNT) + line1Index;
+        uint8_t globalLine2Index =
+            ((uint8_t)vibe * TOUCH_REACTIONS_PER_VIBE) + line2Index;
 
         strcpy_P(output->line1, touchLine1Fragments[globalLine1Index]);
-        strcpy_P(output->line2, touchReactionLine2Fragments[line2Index]);
+        strcpy_P(output->line2, touchReactionLine2Fragments[globalLine2Index]);
     } else {
         ContextPoolConfig config = readPoolConfig(vibe, phase);
         selected = selectAutoCombinationIndex(vibe, phase, contextMinute);
@@ -634,11 +679,14 @@ int validateMessages(MessagePersonality personality) {
                 ? TOUCH_SETUP_COUNT
                 : config.line1Count;
             uint8_t line2Count = personality == PERSONALITY_FLIRTY
-                ? TOUCH_REACTION_COUNT
+                ? TOUCH_REACTIONS_PER_VIBE
                 : AUTO_REACTION_COUNT;
             uint16_t line1Offset = personality == PERSONALITY_FLIRTY
                 ? (uint16_t)poolIndex * TOUCH_SETUP_COUNT
                 : config.line1Offset;
+            uint8_t line2Offset = personality == PERSONALITY_FLIRTY
+                ? vibe * TOUCH_REACTIONS_PER_VIBE
+                : 0;
 
             for (uint8_t line = 0; line < line1Count; line++) {
                 PGM_P fragment = personality == PERSONALITY_FLIRTY
@@ -650,7 +698,7 @@ int validateMessages(MessagePersonality personality) {
 
             for (uint8_t line = 0; line < line2Count; line++) {
                 PGM_P fragment = personality == PERSONALITY_FLIRTY
-                    ? touchReactionLine2Fragments[line]
+                    ? touchReactionLine2Fragments[line2Offset + line]
                     : reactionLine2Fragments[line];
                 uint8_t length = strlen_P(fragment);
                 if (length > 0 && length <= 16) validLine2Count++;

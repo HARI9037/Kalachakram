@@ -2,17 +2,19 @@
 
 # Kalachakram 🎯
 
-Traditional clocks suffer from one major flaw: they tell you the time.
+Traditional clocks suffer from one major design flaw: they tell you the exact time.
 
-Kalachakram is an intentionally unhelpful clock for TinkerHub Useless Projects 3.0. It maintains approximate time internally, works out which part of the day it is, and responds with a vague, sarcastic, context-aware description instead of a precise time.
+Kalachakram is an intentionally unhelpful, fully offline Arduino clock for TinkerHub Useless Projects 3.0. It internally tracks approximate time, determines the current time-vibe and where it is inside that vibe, then displays a sarcastic contextual phrase instead of the useful answer.
 
 ```text
-Normal clock:   04:47 PM
-Kalachakram:   ALMOST EVENING.
-               PROBABLY.
+Internal diagnostics: 19:43, EVENING, MIDDLE
+
+Public LCD:
+WORK?
+QUESTIONABLE.
 ```
 
-The current time determines the vibe category deterministically. Randomness is used only to select one phrase from the valid phrase pool for that vibe.
+Kalachakram does not randomly choose a vibe. Time deterministically selects both the main vibe and the current EARLY/MIDDLE/LATE context. Randomness only varies the ordering of valid phrases inside that contextual pool, and every phrase in the pool is used before that pool repeats.
 
 ## Basic Details
 
@@ -20,55 +22,63 @@ The current time determines the vibe category deterministically. Randomness is u
 
 ### Team Members
 
-- Team Lead: Rifan C Afsal -  Muthoot Institute of Technology and Science
-- Member 2 : Sreehari R Nair - Muthoot Institute of Technology and Science
+- Team Lead: Rifan C Afsal - Muthoot Institute of Technology and Science
+- Member 2: Sreehari R Nair - Muthoot Institute of Technology and Science
 
 ### Project Description
 
-Kalachakram is an offline Arduino-based clock that knows approximate wall-clock time but considers displaying it precisely to be unnecessarily useful. The current firmware classifies time into eight parts of the day and prints one of 48 matching two-line messages to the Serial Monitor.
+Kalachakram maintains approximate software wall-clock time using the sketch's compilation time and elapsed runtime. It classifies the day into eight main vibes, divides each vibe into EARLY, MIDDLE, and LATE phases, and selects from 96 phase-specific two-line messages.
 
-The 16×2 I²C LCD is part of the verified circuit design, but LCD output is not integrated into the current firmware yet.
+Serial Monitor exposes the internal time, vibe, and phase for debugging. The physical 16×2 I²C LCD stays committed to the joke and displays only the selected vague phrase.
 
 ### The Problem (that doesn't exist)
 
-Ordinary clocks are far too cooperative. They provide exact information immediately, leaving no room for uncertainty, sarcasm, or a tiny machine judging your sleep schedule.
+Ordinary clocks are far too cooperative. They provide exact information immediately, leaving no room for uncertainty, sarcasm, or a tiny machine judging your schedule.
 
 ### The Solution (that nobody asked for)
 
-Keep approximate time, hide the useful answer, and provide observations such as `MORNING-ISH. / GOOD ENOUGH.` or `BASICALLY SIX. / DON'T ARGUE.` instead.
+Know the time internally, refuse to reveal it properly, and offer observations such as `SUN IS UP. / I AM NOT.` or `BASICALLY SIX. / DON'T ARGUE.` instead.
 
 ## Current Status
 
 ### Implemented
 
-- Approximate software timekeeping from the sketch's `__TIME__` compilation value plus elapsed `millis()`.
-- A fixed-size `TimeContext` containing hour, minute, and second.
-- Deterministic classification into eight time-of-day vibe categories.
-- Six two-line phrases per category: 48 messages in total.
-- Flash-backed phrase storage using AVR `PROGMEM`.
-- Fixed 17-byte line buffers suitable for a 16-character display row plus null terminator.
-- Random phrase selection only within the active vibe.
-- Immediate-repeat prevention while remaining in the same category.
-- Immediate reselection when the vibe category changes.
-- Non-blocking phrase refresh every 60 seconds.
-- One-second time/vibe diagnostics and message output through Serial at 9600 baud.
-- Compile-time firmware test mode.
+- Fully offline Arduino operation.
+- Approximate software-maintained time using `__TIME__ + millis()`.
+- Fixed-size `TimeContext` with hour, minute, and second.
+- Eight deterministic main vibe categories.
+- Three deterministic context phases per vibe: EARLY, MIDDLE, and LATE.
+- 24 contextual message pools.
+- Four messages per contextual pool: 96 messages total.
+- Full-pool repeat prevention using a small used-bit mask.
+- Immediate-repeat prevention across pool-cycle boundaries.
+- Immediate reselection when the vibe or context phase changes.
+- Non-blocking phrase refresh every three minutes.
+- Flash-backed message storage using AVR `PROGMEM`.
+- Fixed-size 16×2-safe message buffers.
+- Serial diagnostics at 9600 baud.
+- 16×2 I²C LCD output through a dedicated Display Controller.
+- Standalone I²C scanner utility.
+- Compile-time hardware-independent logical test mode.
 
-### Verified
+### Physically Verified
 
-- Source inspection confirms eight categories, six messages per category, and 48 initialized messages.
-- A mechanical source check confirms that every message line is at most 16 characters.
-- Source inspection confirms that the category classifier is deterministic and matches the documented boundaries.
-- The Arduino Uno + 16×2 I²C LCD wiring has been validated in Tinkercad.
+- V0.4 compiles and uploads to an actual Arduino Uno.
+- V0.4 runs successfully on the physical Arduino Uno.
+- Serial output works on the physical prototype.
+- The 16×2 I²C LCD displays Kalachakram messages.
+- The current V0.4 prototype behavior is reported working.
+- The four-wire Arduino Uno/I²C LCD circuit was also validated in Tinkercad.
 
-### Pending
+Exact V0.4 compiler memory figures and the scanner-reported physical address were not recorded.
 
-- Arduino Uno compilation and upload verification in the current development environment.
-- LCD integration in firmware; current output is Serial-only.
-- Physical LCD I²C address scan.
-- Physical Arduino Uno + LCD verification.
-- Final enclosure and physical assembly.
-- Screenshots, build photographs, and demo recording.
+### Pending / Final Polish
+
+- Final enclosure and physical presentation.
+- Submission screenshots.
+- Build photographs.
+- Demo video.
+- Final presentation and demo polish.
 
 ## Technical Details
 
@@ -77,34 +87,36 @@ Keep approximate time, hide the useful answer, and provide observations such as 
 For Software:
 
 - Arduino C/C++.
-- Arduino core functionality through `Arduino.h`.
+- Arduino AVR core.
+- `Wire`, supplied with the Arduino core, for I²C communication.
+- External `LiquidCrystal_I2C` Arduino library for the LCD.
 - AVR program-memory utilities through `avr/pgmspace.h`.
-- Arduino IDE and Serial Monitor for the intended build/upload workflow.
-- No external Arduino library is required by the current source.
+- Arduino IDE and Serial Monitor.
 
-Current source dependencies:
+Current dependencies:
 
 | Type | Dependency | Purpose |
 |---|---|---|
-| Arduino core | `Arduino.h` | `millis()`, `Serial`, `random()`, and `F()` |
+| Arduino core | `Arduino.h` | Runtime, `millis()`, Serial, randomness, and Flash-string helpers |
+| Arduino core library | `Wire.h` | I²C bus communication |
+| External Arduino library | `LiquidCrystal_I2C.h` | 16×2 LCD initialization and output |
 | Standard integer types | `stdint.h` | Fixed-width integer types |
-| Arduino AVR core/toolchain | `avr/pgmspace.h` | `PROGMEM`, `strcpy_P`, and `strlen_P` |
-
-`Wire` and `LiquidCrystal_I2C` are not current dependencies because LCD firmware integration has not been implemented.
+| Arduino AVR core/toolchain | `avr/pgmspace.h` | `PROGMEM`, `strcpy_P`, `strlen_P`, and `pgm_read_byte` |
 
 For Hardware:
 
-- Arduino Uno or Uno-compatible board.
-- 16×2 LCD with an attached I²C backpack.
+- Arduino Uno.
+- 16×2 LCD with attached I²C backpack.
 - Breadboard.
 - Jumper wires.
 - USB cable.
+- Laptop running Arduino IDE.
 
-### Time and Vibe Model
+### Time, Vibe, and Context Model
 
-The firmware divides the day using the hour field of `TimeContext`:
+The main vibe is selected deterministically from the hour:
 
-| Time | Vibe category |
+| Time | Vibe |
 |---|---|
 | 00:00–04:59 | `CURSED_HOURS` |
 | 05:00–07:59 | `TOO_EARLY` |
@@ -115,19 +127,44 @@ The firmware divides the day using the hour field of `TimeContext`:
 | 18:00–20:59 | `EVENING` |
 | 21:00–23:59 | `GO_TO_BED` |
 
-Classification never uses randomness. Once the category is known, the message selector chooses one of that category's six messages and excludes the immediately previous index.
+Each vibe is divided into three equal-duration phases using integer seconds-since-midnight arithmetic:
+
+| Vibe | EARLY | MIDDLE | LATE |
+|---|---|---|---|
+| `CURSED_HOURS` | 00:00:00–01:39:59 | 01:40:00–03:19:59 | 03:20:00–04:59:59 |
+| `TOO_EARLY` | 05:00:00–05:59:59 | 06:00:00–06:59:59 | 07:00:00–07:59:59 |
+| `MORNING` | 08:00:00–08:59:59 | 09:00:00–09:59:59 | 10:00:00–10:59:59 |
+| `LUNCH_LOADING` | 11:00:00–11:39:59 | 11:40:00–12:19:59 | 12:20:00–12:59:59 |
+| `AFTERNOON` | 13:00:00–13:59:59 | 14:00:00–14:59:59 | 15:00:00–15:59:59 |
+| `DAY_IS_DYING` | 16:00:00–16:39:59 | 16:40:00–17:19:59 | 17:20:00–17:59:59 |
+| `EVENING` | 18:00:00–18:59:59 | 19:00:00–19:59:59 | 20:00:00–20:59:59 |
+| `GO_TO_BED` | 21:00:00–21:59:59 | 22:00:00–22:59:59 | 23:00:00–23:59:59 |
+
+Randomness never controls time, vibe, or phase. It only orders the four valid messages in the active vibe/phase pool.
+
+### Contextual Message Selection
+
+The message database contains:
+
+```text
+8 vibes × 3 phases × 4 messages = 96 messages
+```
+
+Each pool uses a four-bit used mask. Only unused message indexes are eligible, so all four messages are shown once before that pool starts another cycle. The final message of one cycle is also excluded from the first selection of the next cycle, preventing an immediate boundary repeat.
+
+A vibe or phase change starts a fresh cycle for the new context.
 
 ### Message Storage and Arduino Uno Constraints
 
-The message bank is declared as:
+The Flash-backed message table is declared as:
 
 ```cpp
-const char vibe_messages[8][6][2][17] PROGMEM;
+const char vibe_messages[8][3][4][2][17] PROGMEM;
 ```
 
-This represents eight categories, six messages per category, two lines per message, and 17 bytes per line including null termination. The static table occupies 1,632 bytes in Flash by declaration; that is not the total compiled firmware size.
+The dimensions represent eight vibes, three phases, four messages per pool, two lines per message, and 17 bytes per line including null termination. Every current visible line is at most 16 characters.
 
-Only the selected message is copied into two small fixed-size RAM buffers. The implementation uses no Arduino `String`, dynamic allocation, or STL containers, which helps respect the Arduino Uno's limited SRAM.
+Only the selected message is copied into two small fixed-size RAM buffers. The firmware uses no Arduino `String`, dynamic allocation, or STL containers.
 
 ### Implementation
 
@@ -135,32 +172,44 @@ For Software:
 
 # Installation
 
-1. Clone or download this repository.
-2. Keep `Kalachakram.ino` and all accompanying `.h` and `.cpp` files in the `Kalachakram` sketch directory.
+1. Clone or download the repository.
+2. Keep the root `.ino`, `.h`, and `.cpp` files together in the `Kalachakram` sketch directory.
 3. Open `Kalachakram.ino` in Arduino IDE.
-4. Select **Arduino Uno** as the board and choose the correct serial/COM port.
-5. No external Arduino library is required by the current Serial-only firmware.
+4. Select **Arduino Uno** and the correct serial/COM port.
+5. Confirm that the Arduino AVR core and `Wire` library are available.
+6. Install a compatible `LiquidCrystal_I2C` library exposing `init()`, `backlight()`, `setCursor()`, and `print()`.
+7. If setting up another LCD, run the standalone scanner and update `KALACHAKRAM_LCD_ADDRESS` with its result.
+
+The committed source currently configures `KALACHAKRAM_LCD_ADDRESS` as `0x27`. This is a source configuration value, not a recorded scanner-confirmed physical measurement.
 
 # Run
 
-1. Compile and upload the sketch from Arduino IDE.
-2. Open Serial Monitor at **9600 baud**.
-3. Observe the initial selected message, the one-second time/vibe debug output, and message changes every 60 seconds or immediately at a category boundary.
-
-The current sketch does not write to the LCD. The circuit below records the verified I²C wiring for the pending display-integration phase.
+1. Connect the Arduino Uno and LCD using the four-wire table below.
+2. Compile and upload `Kalachakram.ino`.
+3. Open Serial Monitor at **9600 baud**.
+4. Observe internal `TIME`, `VIBE`, `PHASE`, and `MESSAGE` diagnostics.
+5. Confirm that the physical LCD displays only the two selected phrase lines.
+6. Normal phrase refresh occurs approximately every three minutes; vibe and phase changes trigger immediate reselection.
 
 ### Source Code Structure
 
 | File | Responsibility |
 |---|---|
-| `Kalachakram.ino` | Main orchestration, non-blocking scheduling, Serial diagnostics, and test-mode control |
-| `time_engine.h`, `time_engine.cpp` | Approximate software timekeeping using `__TIME__` and `millis()` |
-| `vibe_engine.h`, `vibe_engine.cpp` | Vibe-category definitions and deterministic time classification |
-| `messages.h`, `messages.cpp` | Flash-backed phrase bank, contextual selection, validation, and repeat prevention |
+| `Kalachakram.ino` | Main orchestration, non-blocking scheduling, Serial diagnostics, test-mode integration, and display dispatch |
+| `time_engine.h`, `time_engine.cpp` | Approximate software timekeeping from compilation time plus elapsed `millis()` |
+| `vibe_engine.h`, `vibe_engine.cpp` | Main vibe classification and deterministic EARLY/MIDDLE/LATE phase calculation |
+| `messages.h`, `messages.cpp` | Flash-backed contextual phrase bank, validation, and cycle-aware selection |
+| `display_controller.h`, `display_controller.cpp` | 16×2 I²C LCD initialization and fixed-width two-row rendering |
+| `tools/i2c_scanner/i2c_scanner.ino` | Standalone diagnostic for discovering devices on the I²C bus |
 
 ### Output Examples
 
-These messages are copied directly from the current phrase bank:
+These messages come directly from the current V0.4 phrase bank:
+
+```text
+MIDNIGHT PASSED.
+BAD DECISION.
+```
 
 ```text
 SUN IS UP.
@@ -170,11 +219,6 @@ I AM NOT.
 ```text
 LUNCH IS
 APPROACHING.
-```
-
-```text
-WORK ENERGY
-DECLINING.
 ```
 
 ```text
@@ -188,44 +232,63 @@ QUESTIONABLE.
 ```
 
 ```text
+NIGHT IS
+GETTING IDEAS.
+```
+
+```text
 SLEEP EXISTS.
 REMEMBER?
 ```
 
 ### Testing
 
-#### Implemented logical tests
+#### Source / Static Validation
 
-Setting `KALACHAKRAM_TEST_MODE` to `1` enables firmware tests for:
+- The committed initializer contains 96 messages: 12 per vibe and four per contextual pool.
+- All 192 visible lines fit within 16 characters.
+- The message table remains in `PROGMEM`.
+- Source inspection confirms deterministic vibe and phase classification.
+- Source inspection confirms four-message cycle coverage and context-reset behavior.
+- The Display Controller pads both rows to 16 characters, preventing stale LCD characters without clearing on every update.
 
-- Eight representative vibe-classification cases.
-- Sixteen category-boundary cases.
-- Message-line length validation against the 16-character limit.
-- The expected 48-message count.
-- Immediate-repeat detection across repeated selections in all categories.
+#### Embedded Logical Tests
 
-#### Current execution evidence
+Setting `KALACHAKRAM_TEST_MODE` to `1` enables:
 
-- The test implementation and all 24 classification expectations have been inspected against the classifier.
-- The current message initializer has been mechanically checked: 48 messages, six per category, and no line over 16 characters.
-- No Arduino-side execution record is currently available in this workspace, so this README does not claim that the embedded tests passed on an Arduino Uno.
+- Eight representative main-vibe tests.
+- Sixteen main-vibe boundary tests.
+- Forty-eight explicit ContextPhase boundary tests.
+- Message initialization and line-length validation.
+- Immediate-repeat testing across all 24 contextual pools.
+- Full four-message cycle coverage testing.
+- New-cycle, phase-change, and vibe-change reset checks.
 
-#### Physical hardware verification
+These tests exist in the firmware, but no physical execution result for the logical test mode has been recorded.
 
-- The four-wire Arduino Uno/I²C LCD connection is verified in Tinkercad.
-- Physical Arduino and LCD behavior has not yet been verified.
+#### Physical Hardware Verification
+
+- Arduino Uno compile and upload: verified by the working physical V0.4 run.
+- Firmware execution on the physical Uno: verified.
+- Serial diagnostics: verified working.
+- 16×2 I²C LCD output: verified working.
+- Current V0.4 prototype behavior: reported working.
+
+Exact V0.4 Flash/SRAM figures and the physical scanner result are not recorded.
 
 ### Limitations
 
-- There is no RTC. Time begins at the sketch compilation time and advances using `millis()`.
-- Reset or power loss restarts the software clock from that same compilation time, so this is an approximate hackathon prototype rather than a persistent standalone clock.
-- The current firmware sends output only to Serial; LCD integration is pending.
-- The physical LCD I²C address is still pending verification.
-- Arduino Uno compilation is not yet independently verified in the current development environment.
+- Kalachakram has no RTC, NTP, or network synchronization.
+- `__TIME__` supplies the compilation-time baseline and `millis()` advances it while the firmware runs.
+- Reset or power loss returns the software clock to the sketch's compilation-time baseline.
+- It is approximate software-maintained wall-clock time for the hackathon prototype, not persistent precision timekeeping.
+- Physical I²C address: not recorded/TBD.
+- V0.4 Flash usage: not recorded/TBD.
+- V0.4 SRAM usage: not recorded/TBD.
 
 ### Future / Optional
 
-A future version may add a DS3231 RTC, a physical “JUST TELL ME THE TIME” button, weekday-aware behavior, or a few special-time events. These are not present in the current implementation.
+A future version may add a small interactive refusal control using a button or touch sensor. V0.5 interaction is not implemented.
 
 ### Project Documentation
 
@@ -233,9 +296,9 @@ For Software:
 
 # Screenshots (Add at least 3)
 
-- Screenshot 1: To be added after final hardware integration.
-- Screenshot 2: To be added after final hardware integration.
-- Screenshot 3: To be added after final hardware integration.
+- Screenshot 1: To be added after the final build.
+- Screenshot 2: To be added after the final build.
+- Screenshot 3: To be added after the final build.
 
 # Diagrams
 
@@ -244,26 +307,28 @@ flowchart TD
     A[Compile Time + millis] --> B[TimeContext]
     B --> C[Vibe Engine]
     C --> D[VibeCategory]
-    D --> E[Message Selector]
-    E --> F[Serial Monitor]
+    D --> E[Context Phase]
+    E --> F[Contextual Message Pool]
+    F --> G[Cycle-Aware Selector]
+    G --> H[Serial Monitor]
+    G --> I[Display Controller]
+    I --> J[16x2 I2C LCD]
 ```
 
-The diagram reflects the currently implemented Serial-only firmware. A final exported workflow image is still to be added.
+Serial exposes internal diagnostics; the LCD receives only the selected two-line `Message`.
 
 For Hardware:
 
 # Schematic & Circuit
 
-Verified I²C wiring:
-
-| I²C LCD | Arduino Uno |
+| 16×2 I²C LCD | Arduino Uno |
 |---|---|
 | GND | GND |
 | VCC | 5V |
-| SDA | A4 |
-| SCL | A5 |
+| SDA | A4 / SDA |
+| SCL | A5 / SCL |
 
-On Arduino Uno, A4 is SDA and A5 is SCL. Because the LCD has an I²C backpack, the project does not require direct RS, E, or D4–D7 parallel wiring.
+On Arduino Uno, A4 is SDA and A5 is SCL. The LCD already has an I²C backpack, so direct RS, E, or D4–D7 parallel wiring is not used.
 
 ```text
 Arduino Uno          16x2 I2C LCD
@@ -274,13 +339,17 @@ A4   --------------> SDA
 A5   --------------> SCL
 ```
 
-The Arduino Uno + 16×2 I²C LCD wiring has been validated in Tinkercad. A circuit/schematic image will be added after the final build; physical hardware operation is still pending verification.
+The circuit was validated in Tinkercad, and V0.4 LCD output is now working on the physical prototype. A final circuit image remains to be added.
+
+#### Standalone I²C Scanner
+
+`tools/i2c_scanner/i2c_scanner.ino` uses only `Wire`, scans usable 7-bit addresses, and prints detected hexadecimal addresses to Serial at 9600 baud. It is a setup/diagnostic utility and does not run as part of normal Kalachakram firmware.
 
 # Build Photos
 
-- Components photo: To be added after physical build.
-- Build-process photos: To be added after physical build.
-- Final-build photo: To be added after physical build.
+- Components photo: To be added after the final build.
+- Build-process photos: To be added after the final build.
+- Final-build photo: To be added after the final build.
 
 ### Project Demo
 

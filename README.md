@@ -294,8 +294,8 @@ Additional demo materials: TBD.
 
 ## Team Contributions
 
-- [Name 1]: Hardware and circuit — Tinkercad, Arduino/LCD wiring, breadboard work, hardware troubleshooting, and physical assembly.
-- [Name 2]: Software and integration — time engine, Vibe Engine, message engine, firmware integration, testing, and debugging.
+- Rifan C Afsal: Hardware and circuit — Tinkercad, Arduino/LCD wiring, breadboard work, hardware troubleshooting, and physical assembly.
+- Sreehari R Nair: Software and integration — time engine, Vibe Engine, message engine, firmware integration, testing, and debugging.
 
 ---
 Made with ❤️ at TinkerHub Useless Projects

@@ -3,9 +3,13 @@
 #include "vibe_engine.h"
 #include "messages.h"
 #include "display_controller.h"
+#include "touch_controller.h"
 
-// Define to 1 to enable test mode, 0 for normal mode
+// Define to 1 to enable test mode, 0 for normal mode.
+// The guard also allows the build command to override this value.
+#ifndef KALACHAKRAM_TEST_MODE
 #define KALACHAKRAM_TEST_MODE 0
+#endif
 
 unsigned long lastPrintTime = 0;
 const unsigned long PRINT_INTERVAL = 1000; // 1 second
@@ -23,10 +27,12 @@ static bool isMessageSelectionDue(
     unsigned long currentMillis,
     unsigned long previousSelectionMillis,
     bool hasPreviousSelection,
-    bool contextChanged
+    bool contextChanged,
+    bool touchRequested
 ) {
     return !hasPreviousSelection ||
            contextChanged ||
+           touchRequested ||
            (currentMillis - previousSelectionMillis >= MESSAGE_INTERVAL);
 }
 
@@ -36,7 +42,7 @@ void setup() {
     
     Serial.println(F("================================"));
     Serial.println(F("KALACHAKRAM"));
-    Serial.println(F("V0.4.1 - REFRESH HOTFIX"));
+    Serial.println(F("V0.5 - TOUCH INTERACTION"));
     Serial.println(F("================================"));
 
 #if KALACHAKRAM_TEST_MODE
@@ -52,6 +58,7 @@ void setup() {
     Serial.println();
     initTimeEngine(__TIME__);
     initDisplay();
+    initTouchSensor();
 #endif
 }
 
@@ -65,12 +72,14 @@ void loop() {
 
     bool contextChanged = hasSelectedMessage &&
         (vibe != currentVibe || phase != currentPhase);
+    bool touchRequested = wasTouchPressed(currentMillis);
 
     if (isMessageSelectionDue(
         currentMillis,
         lastMessageTime,
         hasSelectedMessage,
-        contextChanged
+        contextChanged,
+        touchRequested
     )) {
         Message msg;
         selectMessage(vibe, phase, &msg);
@@ -83,6 +92,9 @@ void loop() {
         hasSelectedMessage = true;
         
         Serial.println(F("================================"));
+        if (touchRequested) {
+            Serial.println(F("TRIGGER: TOUCH"));
+        }
         Serial.print(F("TIME: "));
         printTimeContext(current);
         Serial.print(F("\nVIBE: "));
@@ -132,6 +144,13 @@ struct PhaseTestCase {
     VibeCategory vibe;
     ContextPhase expected;
 };
+
+void runSingleTest(const TestCase& t, int& passCount, int& failCount);
+void runSinglePhaseTest(
+    const PhaseTestCase& test,
+    int& passCount,
+    int& failCount
+);
 
 void runSingleTest(const TestCase& t, int& passCount, int& failCount) {
     Serial.print(F("[TEST] "));
@@ -327,16 +346,19 @@ void runTests() {
     int schedulerFailures = 0;
     unsigned long selectionTime = 1000UL;
 
-    if (isMessageSelectionDue(60999UL, selectionTime, true, false)) {
+    if (isMessageSelectionDue(60999UL, selectionTime, true, false, false)) {
         schedulerFailures++;
     }
-    if (!isMessageSelectionDue(61000UL, selectionTime, true, false)) {
+    if (!isMessageSelectionDue(61000UL, selectionTime, true, false, false)) {
         schedulerFailures++;
     }
-    if (!isMessageSelectionDue(1001UL, selectionTime, true, true)) {
+    if (!isMessageSelectionDue(1001UL, selectionTime, true, true, false)) {
         schedulerFailures++;
     }
-    if (!isMessageSelectionDue(0UL, 0UL, false, false)) {
+    if (!isMessageSelectionDue(0UL, 0UL, false, false, false)) {
+        schedulerFailures++;
+    }
+    if (!isMessageSelectionDue(1001UL, selectionTime, true, false, true)) {
         schedulerFailures++;
     }
 
@@ -347,6 +369,7 @@ void runTests() {
         rolloverRefreshTime,
         rolloverSelectionTime,
         true,
+        false,
         false
     )) {
         schedulerFailures++;
@@ -357,7 +380,7 @@ void runTests() {
     if (schedulerFailures > 0) msgFail++;
     else msgPass++;
     
-    Serial.println(F("\n=== V0.4.1 RESULT ==="));
+    Serial.println(F("\n=== V0.5 RESULT ==="));
     Serial.print(msgPass);
     Serial.println(F(" PASSED"));
     Serial.print(msgFail);

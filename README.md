@@ -16,6 +16,8 @@ QUESTIONABLE.
 
 Kalachakram does not randomly choose a vibe. Time deterministically selects both the main vibe and the current EARLY/MIDDLE/LATE context. Randomness only varies the ordering of valid phrases inside that contextual pool, and every phrase in the pool is used before that pool repeats.
 
+V0.5 adds one concession to the user: touching a connected digital touch sensor immediately skips to the next valid phrase. It still refuses to reveal the exact time.
+
 ## Basic Details
 
 ### Team Name: Jilebi
@@ -55,6 +57,9 @@ Know the time internally, refuse to reveal it properly, and offer observations s
 - Immediate reselection when the vibe or context phase changes.
 - Non-blocking phrase refresh every 60 seconds.
 - Refresh scheduling updates its timestamp only after a message is selected, preventing ordinary loop iterations from postponing the next refresh.
+- Debounced, edge-triggered touch-to-skip input on configurable Arduino pin D2.
+- One message skip per distinct touch; holding the sensor does not continuously cycle phrases.
+- Touch skips use the existing contextual pool and full-pool repeat prevention.
 - Flash-backed message storage using AVR `PROGMEM`.
 - Fixed-size 16×2-safe message buffers.
 - Serial diagnostics at 9600 baud.
@@ -72,11 +77,14 @@ Know the time internally, refuse to reveal it properly, and offer observations s
 - The four-wire Arduino Uno/I²C LCD circuit was also validated in Tinkercad.
 
 Exact V0.4 compiler memory figures and the scanner-reported physical address were not recorded.
-The V0.4.1 one-minute refresh hotfix is implemented in the current source but still requires an Arduino Uno compile/upload and a timed physical refresh check.
+The current V0.5 source, including the V0.4.1 refresh hotfix, compiles for Arduino Uno with Arduino CLI 1.5.1, Arduino AVR Boards 1.8.8, and LiquidCrystal I2C 1.1.2. The build uses 10,454 bytes of Flash (32%) and 592 bytes of SRAM (28%). Physical verification of the new refresh and touch behavior is still pending.
+V0.5 touch input has not yet been physically verified.
 
 ### Pending / Final Polish
 
-- V0.4.1 Arduino Uno compile/upload and physical verification of consecutive 60-second refreshes.
+- Arduino Uno upload and physical verification of consecutive 60-second refreshes.
+- Confirm the physical touch module's voltage, active polarity, and signal connection before upload.
+- V0.5 Arduino Uno compile/upload and physical touch-to-skip verification.
 - Final enclosure and physical presentation.
 - Submission screenshots.
 - Build photographs.
@@ -110,6 +118,7 @@ For Hardware:
 
 - Arduino Uno.
 - 16×2 LCD with attached I²C backpack.
+- Digital-output touch sensor module; the current source expects active-HIGH output on D2.
 - Breadboard.
 - Jumper wires.
 - USB cable.
@@ -182,6 +191,7 @@ For Software:
 5. Confirm that the Arduino AVR core and `Wire` library are available.
 6. Install a compatible `LiquidCrystal_I2C` library exposing `init()`, `backlight()`, `setCursor()`, and `print()`.
 7. If setting up another LCD, run the standalone scanner and update `KALACHAKRAM_LCD_ADDRESS` with its result.
+8. Confirm that the touch module is safe at 5 V, then connect its digital signal to D2. If it uses another pin or active polarity, update the two configuration values in `touch_controller.h`.
 
 The committed source currently configures `KALACHAKRAM_LCD_ADDRESS` as `0x27`. This is a source configuration value, not a recorded scanner-confirmed physical measurement.
 
@@ -193,6 +203,7 @@ The committed source currently configures `KALACHAKRAM_LCD_ADDRESS` as `0x27`. T
 4. Observe internal `TIME`, `VIBE`, `PHASE`, and `MESSAGE` diagnostics.
 5. Confirm that the physical LCD displays only the two selected phrase lines.
 6. Normal phrase refresh occurs approximately every 60 seconds; vibe and phase changes trigger immediate reselection.
+7. Touch and release the sensor; the LCD should immediately advance once to another message from the same contextual pool, and the next automatic interval starts from that selection.
 
 ### Source Code Structure
 
@@ -203,6 +214,7 @@ The committed source currently configures `KALACHAKRAM_LCD_ADDRESS` as `0x27`. T
 | `vibe_engine.h`, `vibe_engine.cpp` | Main vibe classification and deterministic EARLY/MIDDLE/LATE phase calculation |
 | `messages.h`, `messages.cpp` | Flash-backed contextual phrase bank, validation, and cycle-aware selection |
 | `display_controller.h`, `display_controller.cpp` | 16×2 I²C LCD initialization and fixed-width two-row rendering |
+| `touch_controller.h`, `touch_controller.cpp` | Configurable digital touch input, non-blocking debounce, and one-event-per-touch detection |
 | `tools/i2c_scanner/i2c_scanner.ino` | Standalone diagnostic for discovering devices on the I²C bus |
 
 ### Output Examples
@@ -266,9 +278,10 @@ Setting `KALACHAKRAM_TEST_MODE` to `1` enables:
 - Immediate-repeat testing across all 24 contextual pools.
 - Full four-message cycle coverage testing.
 - New-cycle, phase-change, and vibe-change reset checks.
-- Refresh scheduler checks immediately before and at the 60-second boundary, on first selection, on context change, and across `millis()` rollover.
+- Refresh scheduler checks immediately before and at the 60-second boundary, on first selection, on context change, on touch request, and across `millis()` rollover.
 
 These tests exist in the firmware, but no physical execution result for the logical test mode has been recorded.
+The `KALACHAKRAM_TEST_MODE=1` variant compiles for Arduino Uno and uses 13,176 bytes of Flash (40%) and 528 bytes of SRAM (25%). Compilation confirms the test build is structurally hardware-independent; it does not prove the tests were executed on a board.
 
 #### Physical Hardware Verification
 
@@ -287,12 +300,8 @@ Exact V0.4 Flash/SRAM figures and the physical scanner result are not recorded.
 - Reset or power loss returns the software clock to the sketch's compilation-time baseline.
 - It is approximate software-maintained wall-clock time for the hackathon prototype, not persistent precision timekeeping.
 - Physical I²C address: not recorded/TBD.
-- V0.4 Flash usage: not recorded/TBD.
-- V0.4 SRAM usage: not recorded/TBD.
-
-### Future / Optional
-
-A future version may add a small interactive refusal control using a button or touch sensor. V0.5 interaction is not implemented.
+- V0.5 physical upload and behavior: pending.
+- The current V0.5 touch configuration assumes a digital active-HIGH module on D2; physical module compatibility and behavior remain unverified.
 
 ### Project Documentation
 
@@ -314,6 +323,7 @@ flowchart TD
     D --> E[Context Phase]
     E --> F[Contextual Message Pool]
     F --> G[Cycle-Aware Selector]
+    K[Touch Sensor on D2] --> G
     G --> H[Serial Monitor]
     G --> I[Display Controller]
     I --> J[16x2 I2C LCD]
@@ -344,6 +354,16 @@ A5   --------------> SCL
 ```
 
 The circuit was validated in Tinkercad, and V0.4 LCD output is now working on the physical prototype. A final circuit image remains to be added.
+
+The V0.5 source additionally expects an active-HIGH digital touch signal on D2. Because the exact physical touch module has not been documented, verify its voltage and pin labels before wiring; do not infer them from this generic interface description.
+
+Expected digital interface after checking the module datasheet:
+
+| Digital touch module | Arduino Uno |
+|---|---|
+| GND | GND |
+| VCC | Module-rated supply; use 5 V only if supported |
+| OUT / SIG | D2 |
 
 #### Standalone I²C Scanner
 

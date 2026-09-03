@@ -2,6 +2,7 @@
 #include "time_engine.h"
 #include "vibe_engine.h"
 #include "messages.h"
+#include "display_controller.h"
 
 // Define to 1 to enable test mode, 0 for normal mode
 #define KALACHAKRAM_TEST_MODE 0
@@ -22,7 +23,7 @@ void setup() {
     
     Serial.println(F("================================"));
     Serial.println(F("KALACHAKRAM"));
-    Serial.println(F("V0.2 - PERSONALITY"));
+    Serial.println(F("V0.3 - EYES"));
     Serial.println(F("================================"));
 
 #if KALACHAKRAM_TEST_MODE
@@ -36,10 +37,8 @@ void setup() {
     Serial.println(F("MODE: NORMAL"));
     Serial.println(F("TIME SOURCE: COMPILE TIME + MILLIS"));
     Serial.println();
-    
-
-    
     initTimeEngine(__TIME__);
+    initDisplay();
 #endif
 }
 
@@ -74,6 +73,8 @@ void loop() {
         Serial.println(msg.line1);
         Serial.println(msg.line2);
         Serial.println(F("================================\n"));
+
+        displayMessage(msg);
     }
     
     // 1-second debug tick

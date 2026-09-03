@@ -4,7 +4,11 @@
 
 static const uint8_t VIBE_COUNT = 8;
 static const uint8_t PHASE_COUNT = 3;
-static const uint8_t REACTION_COUNT = 10;
+static const uint8_t AUTO_REACTION_COUNT = 10;
+static const uint8_t TOUCH_SETUP_COUNT = 3;
+static const uint8_t TOUCH_REACTION_COUNT = 4;
+static const uint8_t TOUCH_POOL_CAPACITY =
+    TOUCH_SETUP_COUNT * TOUCH_REACTION_COUNT;
 static const uint8_t MAX_POOL_BYTES = 15; // 120 combinations / 8
 
 struct ContextPoolConfig {
@@ -245,10 +249,10 @@ const char contextLine1Fragments[][17] PROGMEM = {
     "FREE TIME FOUND.",
     "PLANS PENDING",
     "COUCH MODE ON",
-    "MISS ME ALREADY?",
-    "STILL STARING?",
-    "CLOCK DATE?",
-    "EVENING FLIRTS",
+    "WORK MUDIYO?",
+    "PLAN ONNUM ILLE?",
+    "EVENING PLAN?",
+    "COUCH READYANO?",
 
     // EVENING / LATE (10)
     "NIGHT MODE",
@@ -299,18 +303,70 @@ const char contextLine1Fragments[][17] PROGMEM = {
     "LATE GOT ABSURD"
 };
 
-// Standalone reactions are intentionally compatible with every setup above.
+// Automatic reactions keep every non-touch output sarcastic and Manglish,
+// without using romantic, appearance, or touch-directed language.
 const char reactionLine2Fragments[][17] PROGMEM = {
-    "APPARENTLY.",
-    "QUESTIONABLE.",
-    "I NOTICED.",
-    "BOLD CHOICE.",
-    "HOW ADORABLE.",
-    "TIME DISAGREES.",
-    "REMEMBER?",
-    "VERY DRAMATIC.",
-    "THAT TRACKS.",
-    "DON'T ARGUE."
+    "PINNE ENTHA.",
+    "ATHU SHERI.",
+    "NALE NOKKAM.",
+    "VERUTHE AANO?",
+    "SAMAYAM PARAYUM.",
+    "ITHU MATHI.",
+    "URAKKAM VARUM.",
+    "SCENE AAKALLE.",
+    "POYI PANI NOKKU.",
+    "NALLA KATHA."
+};
+
+// Three time-specific touch setups per vibe/phase. Each line is globally
+// unique, and every setup is compatible with every playful reaction below.
+const char touchLine1Fragments[][17] PROGMEM = {
+    // CURSED_HOURS
+    "RATHRIYIL VEE?", "MIDNIGHT TOUCH?", "URAKKAM POYO?",
+    "2AM-IL VEE?", "NIGHTIL ENTHA?", "SLEEP VITTALLO?",
+    "DAWN VARE VEE?", "BED VENDAYO?", "AWAKE THANNEYO?",
+
+    // TOO_EARLY
+    "RAAVILE THANNE?", "DAWN-IL TOUCH?", "ALARM KAZHINJO?",
+    "COFFEEKKU MUNPE?", "MORNING TOUCH?", "KANN THURANNO?",
+    "SUN UP AAYALLE?", "COFFEE KITTIO?", "EARLYIL ENTHA?",
+
+    // MORNING
+    "WORKINU MUNPE?", "MORNINGIL VEE?", "INBOX VITTALLO?",
+    "WORK BOR AAYO?", "CLASSIL TOUCH?", "FOCUS POYO?",
+    "LUNCHINU MUNPE?", "WORK VITTU VEE?", "NOON WAIT AANO?",
+
+    // LUNCH_LOADING
+    "FOODINU MUNPE?", "LUNCH WAIT AAYO?", "HUNGERIL TOUCH?",
+    "FOOD OR NJAN?", "LUNCH BOR AAYO?", "SNACK VITTALLO?",
+    "LUNCH READYANO?", "PLATE NOKKUNNO?", "FOOD VANNILLE?",
+
+    // AFTERNOON
+    "LUNCH KAZHINJO?", "NAPINU MUNPE?", "PM-IL ENNEYO?",
+    "BORED AAYO?", "NAP VENDAYO?", "WORK SLOW AANO?",
+    "ESCAPE NOKKUNNO?", "EVENING WAIT?", "WORK MUDIYO?",
+
+    // DAY_IS_DYING
+    "HOME POKANDE?", "SUNSET TOUCH?", "DAY TIRED AAYO?",
+    "EVENING VEE?", "WORK VITTALLO?", "HOME MODE AAYO?",
+    "SIX AAKUNNO?", "SUNSET NOKKUNNO?", "DAY BYE AAYO?",
+
+    // EVENING
+    "PLAN ILLALLE?", "EVENINGIL VEE?", "SUNSETIL VEE?",
+    "VEENDUM VANNO?", "ENNE NOKKUNNO?", "FREE AAYALLE?",
+    "NIGHT PLAN ILLE?", "COUCH VITTALLO?", "LATEIL ENTHA?",
+
+    // GO_TO_BED
+    "SLEEP VENDA?", "BEDTIME TOUCH?", "NIGHTIL ENNEYO?",
+    "URANGANILLE?", "PILLOW VITTALLO?", "VEENDUM NIGHTIL?",
+    "MIDNIGHT MUNPE?", "SLEEP POYO?", "LAST TOUCH AANO?"
+};
+
+const char touchReactionLine2Fragments[][17] PROGMEM = {
+    "MISS CHEYTHO?",
+    "CUTE AANALLO.",
+    "NJAN IVDE UNDU.",
+    "SHY AAKUM KETTO."
 };
 
 // {line1 offset, line1 count, phase duration in minutes}
@@ -359,8 +415,9 @@ const ContextPoolConfig contextPools[8][3] PROGMEM = {
 
 // Retaining one counter per pool prevents an arbitrary mid-phase boot from
 // replaying that starting pool when it is revisited just before 24 hours.
-static uint16_t poolSelectionCounters[VIBE_COUNT * PHASE_COUNT] = {0};
-static uint32_t initializedPoolMask = 0;
+static uint16_t autoSelectionCounters[VIBE_COUNT * PHASE_COUNT] = {0};
+static uint8_t touchSelectionCounters[VIBE_COUNT * PHASE_COUNT] = {0};
+static uint32_t initializedAutoPoolMask = 0;
 
 static ContextPoolConfig readPoolConfig(
     VibeCategory vibe,
@@ -401,58 +458,129 @@ static uint16_t permuteCombinationIndex(
     return ((uint32_t)multiplier * counter + offset) % capacity;
 }
 
-static void initializePoolIfNeeded(
+static void initializeAutoPoolIfNeeded(
     VibeCategory vibe,
     ContextPhase phase,
     uint8_t contextMinute
 ) {
     uint8_t poolIndex = getPoolIndex(vibe, phase);
     uint32_t poolBit = 1UL << poolIndex;
-    if ((initializedPoolMask & poolBit) != 0) return;
+    if ((initializedAutoPoolMask & poolBit) != 0) return;
 
-    uint16_t capacity = getMessageCapacity(vibe, phase);
-    poolSelectionCounters[poolIndex] = contextMinute % capacity;
-    initializedPoolMask |= poolBit;
+    uint16_t capacity = getMessageCapacity(
+        vibe,
+        phase,
+        PERSONALITY_NORMAL
+    );
+    autoSelectionCounters[poolIndex] = contextMinute % capacity;
+    initializedAutoPoolMask |= poolBit;
 }
 
-static uint16_t selectCombinationIndex(
+static uint16_t selectAutoCombinationIndex(
     VibeCategory vibe,
     ContextPhase phase,
     uint8_t contextMinute
 ) {
-    initializePoolIfNeeded(vibe, phase, contextMinute);
+    initializeAutoPoolIfNeeded(vibe, phase, contextMinute);
     uint8_t poolIndex = getPoolIndex(vibe, phase);
-    uint16_t capacity = getMessageCapacity(vibe, phase);
+    uint16_t capacity = getMessageCapacity(
+        vibe,
+        phase,
+        PERSONALITY_NORMAL
+    );
     uint16_t combinationIndex = permuteCombinationIndex(
         vibe,
         phase,
-        poolSelectionCounters[poolIndex],
+        autoSelectionCounters[poolIndex],
         capacity
     );
 
-    poolSelectionCounters[poolIndex]++;
-    if (poolSelectionCounters[poolIndex] >= capacity) {
-        poolSelectionCounters[poolIndex] = 0;
+    autoSelectionCounters[poolIndex]++;
+    if (autoSelectionCounters[poolIndex] >= capacity) {
+        autoSelectionCounters[poolIndex] = 0;
     }
 
     return combinationIndex;
 }
 
+static uint8_t permuteTouchCombinationIndex(
+    uint8_t poolIndex,
+    uint8_t counter
+) {
+    uint8_t offset = (poolIndex * 7U + 3U) % TOUCH_POOL_CAPACITY;
+    return (5U * counter + offset) % TOUCH_POOL_CAPACITY;
+}
+
+static uint8_t selectTouchCombinationIndex(
+    VibeCategory vibe,
+    ContextPhase phase
+) {
+    uint8_t poolIndex = getPoolIndex(vibe, phase);
+    uint8_t selected = permuteTouchCombinationIndex(
+        poolIndex,
+        touchSelectionCounters[poolIndex]
+    );
+
+    touchSelectionCounters[poolIndex]++;
+    if (touchSelectionCounters[poolIndex] >= TOUCH_POOL_CAPACITY) {
+        touchSelectionCounters[poolIndex] = 0;
+    }
+
+    return selected;
+}
+
+MessagePersonality getMessagePersonality(MessageTrigger trigger) {
+    return trigger == TRIGGER_TOUCH
+        ? PERSONALITY_FLIRTY
+        : PERSONALITY_NORMAL;
+}
+
+const char* getMessageTriggerName(MessageTrigger trigger) {
+    switch (trigger) {
+        case TRIGGER_STARTUP: return "STARTUP";
+        case TRIGGER_TIMER:   return "TIMER";
+        case TRIGGER_CONTEXT: return "CONTEXT";
+        case TRIGGER_TOUCH:   return "TOUCH";
+        default:              return "UNKNOWN";
+    }
+}
+
+const char* getMessagePersonalityName(MessagePersonality personality) {
+    return personality == PERSONALITY_FLIRTY ? "FLIRTY" : "NORMAL";
+}
+
 void selectMessage(
     VibeCategory vibe,
     ContextPhase phase,
+    MessageTrigger trigger,
     uint8_t contextMinute,
     Message* output,
     uint16_t* combinationIndex
 ) {
-    ContextPoolConfig config = readPoolConfig(vibe, phase);
-    uint16_t selected = selectCombinationIndex(vibe, phase, contextMinute);
-    uint8_t line1Index = selected % config.line1Count;
-    uint8_t line2Index = selected / config.line1Count;
-    uint16_t globalLine1Index = config.line1Offset + line1Index;
+    MessagePersonality personality = getMessagePersonality(trigger);
+    uint16_t selected;
 
-    strcpy_P(output->line1, contextLine1Fragments[globalLine1Index]);
-    strcpy_P(output->line2, reactionLine2Fragments[line2Index]);
+    if (personality == PERSONALITY_FLIRTY) {
+        uint8_t poolIndex = getPoolIndex(vibe, phase);
+        selected = selectTouchCombinationIndex(vibe, phase);
+        uint8_t line1Index = selected % TOUCH_SETUP_COUNT;
+        uint8_t line2Index = selected / TOUCH_SETUP_COUNT;
+        uint16_t globalLine1Index =
+            ((uint16_t)poolIndex * TOUCH_SETUP_COUNT) + line1Index;
+
+        strcpy_P(output->line1, touchLine1Fragments[globalLine1Index]);
+        strcpy_P(output->line2, touchReactionLine2Fragments[line2Index]);
+    } else {
+        ContextPoolConfig config = readPoolConfig(vibe, phase);
+        selected = selectAutoCombinationIndex(vibe, phase, contextMinute);
+        uint8_t line1Index = selected % config.line1Count;
+        uint8_t line2Index = selected / config.line1Count;
+        uint16_t globalLine1Index = config.line1Offset + line1Index;
+
+        strcpy_P(output->line1, contextLine1Fragments[globalLine1Index]);
+        strcpy_P(output->line2, reactionLine2Fragments[line2Index]);
+    }
+
     output->line1[16] = '\0';
     output->line2[16] = '\0';
 
@@ -461,49 +589,70 @@ void selectMessage(
     }
 }
 
-uint16_t getMessageCapacity(VibeCategory vibe, ContextPhase phase) {
+uint16_t getMessageCapacity(
+    VibeCategory vibe,
+    ContextPhase phase,
+    MessagePersonality personality
+) {
+    if (personality == PERSONALITY_FLIRTY) return TOUCH_POOL_CAPACITY;
+
     ContextPoolConfig config = readPoolConfig(vibe, phase);
-    return (uint16_t)config.line1Count * REACTION_COUNT;
+    return (uint16_t)config.line1Count * AUTO_REACTION_COUNT;
 }
 
 uint8_t getMessageContextDuration(VibeCategory vibe, ContextPhase phase) {
     return readPoolConfig(vibe, phase).durationMinutes;
 }
 
-int countMessages() {
+int countMessages(MessagePersonality personality) {
     int total = 0;
     for (uint8_t vibe = 0; vibe < VIBE_COUNT; vibe++) {
         for (uint8_t phase = 0; phase < PHASE_COUNT; phase++) {
             total += getMessageCapacity(
                 (VibeCategory)vibe,
-                (ContextPhase)phase
+                (ContextPhase)phase,
+                personality
             );
         }
     }
     return total;
 }
 
-int validateMessages() {
+int validateMessages(MessagePersonality personality) {
     int validCombinations = 0;
 
     for (uint8_t vibe = 0; vibe < VIBE_COUNT; vibe++) {
         for (uint8_t phase = 0; phase < PHASE_COUNT; phase++) {
+            uint8_t poolIndex = (vibe * PHASE_COUNT) + phase;
             ContextPoolConfig config = readPoolConfig(
                 (VibeCategory)vibe,
                 (ContextPhase)phase
             );
             uint8_t validLine1Count = 0;
             uint8_t validLine2Count = 0;
+            uint8_t line1Count = personality == PERSONALITY_FLIRTY
+                ? TOUCH_SETUP_COUNT
+                : config.line1Count;
+            uint8_t line2Count = personality == PERSONALITY_FLIRTY
+                ? TOUCH_REACTION_COUNT
+                : AUTO_REACTION_COUNT;
+            uint16_t line1Offset = personality == PERSONALITY_FLIRTY
+                ? (uint16_t)poolIndex * TOUCH_SETUP_COUNT
+                : config.line1Offset;
 
-            for (uint8_t line = 0; line < config.line1Count; line++) {
-                uint8_t length = strlen_P(
-                    contextLine1Fragments[config.line1Offset + line]
-                );
+            for (uint8_t line = 0; line < line1Count; line++) {
+                PGM_P fragment = personality == PERSONALITY_FLIRTY
+                    ? touchLine1Fragments[line1Offset + line]
+                    : contextLine1Fragments[line1Offset + line];
+                uint8_t length = strlen_P(fragment);
                 if (length > 0 && length <= 16) validLine1Count++;
             }
 
-            for (uint8_t line = 0; line < REACTION_COUNT; line++) {
-                uint8_t length = strlen_P(reactionLine2Fragments[line]);
+            for (uint8_t line = 0; line < line2Count; line++) {
+                PGM_P fragment = personality == PERSONALITY_FLIRTY
+                    ? touchReactionLine2Fragments[line]
+                    : reactionLine2Fragments[line];
+                uint8_t length = strlen_P(fragment);
                 if (length > 0 && length <= 16) validLine2Count++;
             }
 
@@ -516,67 +665,102 @@ int validateMessages() {
 }
 
 static void saveSelectionState(
-    uint16_t savedCounters[VIBE_COUNT * PHASE_COUNT],
+    uint16_t savedAutoCounters[VIBE_COUNT * PHASE_COUNT],
+    uint8_t savedTouchCounters[VIBE_COUNT * PHASE_COUNT],
     uint32_t& savedMask
 ) {
-    memcpy(savedCounters, poolSelectionCounters, sizeof(poolSelectionCounters));
-    savedMask = initializedPoolMask;
+    memcpy(
+        savedAutoCounters,
+        autoSelectionCounters,
+        sizeof(autoSelectionCounters)
+    );
+    memcpy(
+        savedTouchCounters,
+        touchSelectionCounters,
+        sizeof(touchSelectionCounters)
+    );
+    savedMask = initializedAutoPoolMask;
 }
 
 static void restoreSelectionState(
-    const uint16_t savedCounters[VIBE_COUNT * PHASE_COUNT],
+    const uint16_t savedAutoCounters[VIBE_COUNT * PHASE_COUNT],
+    const uint8_t savedTouchCounters[VIBE_COUNT * PHASE_COUNT],
     uint32_t savedMask
 ) {
-    memcpy(poolSelectionCounters, savedCounters, sizeof(poolSelectionCounters));
-    initializedPoolMask = savedMask;
+    memcpy(
+        autoSelectionCounters,
+        savedAutoCounters,
+        sizeof(autoSelectionCounters)
+    );
+    memcpy(
+        touchSelectionCounters,
+        savedTouchCounters,
+        sizeof(touchSelectionCounters)
+    );
+    initializedAutoPoolMask = savedMask;
 }
 
 int testRepetition() {
     int failures = 0;
-    uint16_t savedCounters[VIBE_COUNT * PHASE_COUNT];
+    uint16_t savedAutoCounters[VIBE_COUNT * PHASE_COUNT];
+    uint8_t savedTouchCounters[VIBE_COUNT * PHASE_COUNT];
     uint32_t savedMask;
-    saveSelectionState(savedCounters, savedMask);
+    saveSelectionState(savedAutoCounters, savedTouchCounters, savedMask);
 
     for (uint8_t vibe = 0; vibe < VIBE_COUNT; vibe++) {
         for (uint8_t phase = 0; phase < PHASE_COUNT; phase++) {
-            uint8_t seen[MAX_POOL_BYTES] = {0};
             VibeCategory testVibe = (VibeCategory)vibe;
             ContextPhase testPhase = (ContextPhase)phase;
-            uint16_t capacity = getMessageCapacity(testVibe, testPhase);
             uint8_t poolIndex = getPoolIndex(testVibe, testPhase);
-            poolSelectionCounters[poolIndex] = 0;
-            initializedPoolMask |= 1UL << poolIndex;
 
-            for (uint16_t selection = 0; selection < capacity; selection++) {
-                uint16_t index = selectCombinationIndex(
+            for (uint8_t personality = 0; personality < 2; personality++) {
+                uint8_t seen[MAX_POOL_BYTES] = {0};
+                MessagePersonality testPersonality =
+                    (MessagePersonality)personality;
+                uint16_t capacity = getMessageCapacity(
                     testVibe,
                     testPhase,
-                    0
+                    testPersonality
                 );
-                uint8_t byteIndex = index / 8U;
-                uint8_t bit = 1U << (index % 8U);
 
-                if ((seen[byteIndex] & bit) != 0) failures++;
-                seen[byteIndex] |= bit;
+                autoSelectionCounters[poolIndex] = 0;
+                touchSelectionCounters[poolIndex] = 0;
+                initializedAutoPoolMask |= 1UL << poolIndex;
+
+                for (uint16_t selection = 0; selection < capacity; selection++) {
+                    uint16_t index = testPersonality == PERSONALITY_FLIRTY
+                        ? selectTouchCombinationIndex(testVibe, testPhase)
+                        : selectAutoCombinationIndex(testVibe, testPhase, 0);
+                    uint8_t byteIndex = index / 8U;
+                    uint8_t bit = 1U << (index % 8U);
+
+                    if ((seen[byteIndex] & bit) != 0) failures++;
+                    seen[byteIndex] |= bit;
+                }
             }
         }
     }
 
-    restoreSelectionState(savedCounters, savedMask);
+    restoreSelectionState(savedAutoCounters, savedTouchCounters, savedMask);
     return failures;
 }
 
 int testMessageCycle() {
     int failures = 0;
-    uint16_t savedCounters[VIBE_COUNT * PHASE_COUNT];
+    uint16_t savedAutoCounters[VIBE_COUNT * PHASE_COUNT];
+    uint8_t savedTouchCounters[VIBE_COUNT * PHASE_COUNT];
     uint32_t savedMask;
-    saveSelectionState(savedCounters, savedMask);
+    saveSelectionState(savedAutoCounters, savedTouchCounters, savedMask);
 
     for (uint8_t vibe = 0; vibe < VIBE_COUNT; vibe++) {
         for (uint8_t phase = 0; phase < PHASE_COUNT; phase++) {
             VibeCategory testVibe = (VibeCategory)vibe;
             ContextPhase testPhase = (ContextPhase)phase;
-            uint16_t capacity = getMessageCapacity(testVibe, testPhase);
+            uint16_t capacity = getMessageCapacity(
+                testVibe,
+                testPhase,
+                PERSONALITY_NORMAL
+            );
             uint8_t duration = getMessageContextDuration(testVibe, testPhase);
 
             if (capacity < duration) failures++;
@@ -585,9 +769,23 @@ int testMessageCycle() {
             uint16_t firstIndex;
             uint16_t secondIndex;
             uint8_t poolIndex = getPoolIndex(testVibe, testPhase);
-            initializedPoolMask &= ~(1UL << poolIndex);
-            selectMessage(testVibe, testPhase, 0, &message, &firstIndex);
-            selectMessage(testVibe, testPhase, 0, &message, &secondIndex);
+            initializedAutoPoolMask &= ~(1UL << poolIndex);
+            selectMessage(
+                testVibe,
+                testPhase,
+                TRIGGER_STARTUP,
+                0,
+                &message,
+                &firstIndex
+            );
+            selectMessage(
+                testVibe,
+                testPhase,
+                TRIGGER_TIMER,
+                0,
+                &message,
+                &secondIndex
+            );
 
             if (firstIndex == secondIndex) failures++;
             if (message.line1[16] != '\0' || message.line2[16] != '\0') {
@@ -597,12 +795,14 @@ int testMessageCycle() {
     }
 
     uint8_t anchoredPool = getPoolIndex(EVENING, PHASE_MIDDLE);
-    initializedPoolMask &= ~(1UL << anchoredPool);
+    initializedAutoPoolMask &= ~(1UL << anchoredPool);
+    touchSelectionCounters[anchoredPool] = 0;
     uint16_t anchoredIndex;
     Message anchoredMessage;
     selectMessage(
         EVENING,
         PHASE_MIDDLE,
+        TRIGGER_STARTUP,
         7,
         &anchoredMessage,
         &anchoredIndex
@@ -611,17 +811,18 @@ int testMessageCycle() {
         EVENING,
         PHASE_MIDDLE,
         7,
-        getMessageCapacity(EVENING, PHASE_MIDDLE)
+        getMessageCapacity(EVENING, PHASE_MIDDLE, PERSONALITY_NORMAL)
     );
     if (anchoredIndex != expected) failures++;
 
     uint16_t otherIndex;
     Message otherMessage;
     uint8_t otherPool = getPoolIndex(GO_TO_BED, PHASE_LATE);
-    initializedPoolMask &= ~(1UL << otherPool);
+    initializedAutoPoolMask &= ~(1UL << otherPool);
     selectMessage(
         GO_TO_BED,
         PHASE_LATE,
+        TRIGGER_CONTEXT,
         0,
         &otherMessage,
         &otherIndex
@@ -631,6 +832,7 @@ int testMessageCycle() {
     selectMessage(
         EVENING,
         PHASE_MIDDLE,
+        TRIGGER_TIMER,
         0,
         &anchoredMessage,
         &resumedIndex
@@ -639,10 +841,53 @@ int testMessageCycle() {
         EVENING,
         PHASE_MIDDLE,
         8,
-        getMessageCapacity(EVENING, PHASE_MIDDLE)
+        getMessageCapacity(EVENING, PHASE_MIDDLE, PERSONALITY_NORMAL)
     );
     if (resumedIndex != expectedResumed) failures++;
 
-    restoreSelectionState(savedCounters, savedMask);
+    // Required interleaving: A1, T1, T2, A2, A3, T3, A4. Touch must
+    // advance only the touch sequence and leave automatic progression intact.
+    initializedAutoPoolMask &= ~(1UL << anchoredPool);
+    touchSelectionCounters[anchoredPool] = 0;
+    uint16_t autoIndexes[4];
+    uint16_t touchIndexes[3];
+    selectMessage(EVENING, PHASE_MIDDLE, TRIGGER_STARTUP, 7,
+                  &anchoredMessage, &autoIndexes[0]);
+    selectMessage(EVENING, PHASE_MIDDLE, TRIGGER_TOUCH, 7,
+                  &anchoredMessage, &touchIndexes[0]);
+    selectMessage(EVENING, PHASE_MIDDLE, TRIGGER_TOUCH, 7,
+                  &anchoredMessage, &touchIndexes[1]);
+    selectMessage(EVENING, PHASE_MIDDLE, TRIGGER_TIMER, 7,
+                  &anchoredMessage, &autoIndexes[1]);
+    selectMessage(EVENING, PHASE_MIDDLE, TRIGGER_TIMER, 7,
+                  &anchoredMessage, &autoIndexes[2]);
+    selectMessage(EVENING, PHASE_MIDDLE, TRIGGER_TOUCH, 7,
+                  &anchoredMessage, &touchIndexes[2]);
+    selectMessage(EVENING, PHASE_MIDDLE, TRIGGER_TIMER, 7,
+                  &anchoredMessage, &autoIndexes[3]);
+
+    uint16_t autoCapacity = getMessageCapacity(
+        EVENING,
+        PHASE_MIDDLE,
+        PERSONALITY_NORMAL
+    );
+    for (uint8_t index = 0; index < 4; index++) {
+        uint16_t expectedAuto = permuteCombinationIndex(
+            EVENING,
+            PHASE_MIDDLE,
+            7U + index,
+            autoCapacity
+        );
+        if (autoIndexes[index] != expectedAuto) failures++;
+    }
+    for (uint8_t index = 0; index < 3; index++) {
+        uint8_t expectedTouch = permuteTouchCombinationIndex(
+            anchoredPool,
+            index
+        );
+        if (touchIndexes[index] != expectedTouch) failures++;
+    }
+
+    restoreSelectionState(savedAutoCounters, savedTouchCounters, savedMask);
     return failures;
 }

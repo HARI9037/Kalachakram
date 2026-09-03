@@ -42,7 +42,7 @@ void setup() {
     
     Serial.println(F("================================"));
     Serial.println(F("KALACHAKRAM"));
-    Serial.println(F("V0.6 - MINUTE PERSONALITY"));
+    Serial.println(F("V0.6.1 - TRIGGER-AWARE MANGLISH"));
     Serial.println(F("================================"));
 
 #if KALACHAKRAM_TEST_MODE
@@ -82,11 +82,23 @@ void loop() {
         contextChanged,
         touchRequested
     )) {
+        MessageTrigger trigger;
+        if (touchRequested) {
+            trigger = TRIGGER_TOUCH;
+        } else if (!hasSelectedMessage) {
+            trigger = TRIGGER_STARTUP;
+        } else if (contextChanged) {
+            trigger = TRIGGER_CONTEXT;
+        } else {
+            trigger = TRIGGER_TIMER;
+        }
+
         Message msg;
         uint16_t combinationIndex;
         selectMessage(
             vibe,
             phase,
+            trigger,
             contextMinute,
             &msg,
             &combinationIndex
@@ -100,9 +112,10 @@ void loop() {
         hasSelectedMessage = true;
         
         Serial.println(F("================================"));
-        if (touchRequested) {
-            Serial.println(F("TRIGGER: TOUCH"));
-        }
+        Serial.print(F("TRIGGER: "));
+        Serial.println(getMessageTriggerName(trigger));
+        Serial.print(F("PERSONALITY: "));
+        Serial.println(getMessagePersonalityName(getMessagePersonality(trigger)));
         Serial.print(F("TIME: "));
         printTimeContext(current);
         Serial.print(F("\nVIBE: "));
@@ -326,16 +339,27 @@ void runTests() {
     int msgFail = 0;
     
     Serial.println(F("=== COMPOSITION VALIDATION TESTS ==="));
-    int validCount = validateMessages();
-    Serial.print(validCount);
+    int validAutoCount = validateMessages(PERSONALITY_NORMAL);
+    Serial.print(F("AUTO: "));
+    Serial.print(validAutoCount);
     Serial.println(F(" / 2340 combinations valid"));
-    if (validCount != 2340) msgFail++;
+    if (validAutoCount != 2340) msgFail++;
+    else msgPass++;
+
+    int validTouchCount = validateMessages(PERSONALITY_FLIRTY);
+    Serial.print(F("TOUCH: "));
+    Serial.print(validTouchCount);
+    Serial.println(F(" / 288 combinations valid"));
+    if (validTouchCount != 288) msgFail++;
     else msgPass++;
     
-    int totalCount = countMessages();
-    Serial.print(F("Total combinations: "));
-    Serial.println(totalCount);
-    if (totalCount != 2340) msgFail++;
+    int totalAutoCount = countMessages(PERSONALITY_NORMAL);
+    int totalTouchCount = countMessages(PERSONALITY_FLIRTY);
+    Serial.print(F("AUTO combinations: "));
+    Serial.println(totalAutoCount);
+    Serial.print(F("TOUCH combinations: "));
+    Serial.println(totalTouchCount);
+    if (totalAutoCount != 2340 || totalTouchCount != 288) msgFail++;
     else msgPass++;
     
     Serial.println(F("\n=== REPEAT PREVENTION TESTS ==="));
@@ -372,6 +396,21 @@ void runTests() {
         schedulerFailures++;
     }
 
+    // A touch selection at 30 seconds restarts the full 60-second interval.
+    if (isMessageSelectionDue(89999UL, 30000UL, true, false, false)) {
+        schedulerFailures++;
+    }
+    if (!isMessageSelectionDue(90000UL, 30000UL, true, false, false)) {
+        schedulerFailures++;
+    }
+
+    if (getMessagePersonality(TRIGGER_STARTUP) != PERSONALITY_NORMAL ||
+        getMessagePersonality(TRIGGER_TIMER) != PERSONALITY_NORMAL ||
+        getMessagePersonality(TRIGGER_CONTEXT) != PERSONALITY_NORMAL ||
+        getMessagePersonality(TRIGGER_TOUCH) != PERSONALITY_FLIRTY) {
+        schedulerFailures++;
+    }
+
     unsigned long rolloverSelectionTime = 0xFFFFFF00UL;
     unsigned long rolloverRefreshTime =
         rolloverSelectionTime + MESSAGE_INTERVAL;
@@ -390,7 +429,7 @@ void runTests() {
     if (schedulerFailures > 0) msgFail++;
     else msgPass++;
     
-    Serial.println(F("\n=== V0.6 RESULT ==="));
+    Serial.println(F("\n=== V0.6.1 RESULT ==="));
     Serial.print(msgPass);
     Serial.println(F(" PASSED"));
     Serial.print(msgFail);

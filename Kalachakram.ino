@@ -16,24 +16,43 @@ const unsigned long PRINT_INTERVAL = 1000; // 1 second
 
 unsigned long lastMessageTime = 0;
 const unsigned long MESSAGE_INTERVAL = 60000UL; // 1 minute
-bool hasSelectedMessage = false;
+const unsigned long TOUCH_FLIRT_DISPLAY_MS = 10000UL; // 10 seconds
+bool hasNormalMessage = false;
+bool flirtOverlayActive = false;
+unsigned long flirtOverlayStartTime = 0;
 VibeCategory currentVibe = CURSED_HOURS;
 ContextPhase currentPhase = PHASE_EARLY;
+Message cachedNormalMessage;
 
 void runTests();
 void printTimeContext(const TimeContext& ctx);
 
-static bool isMessageSelectionDue(
+enum RuntimeAction {
+    ACTION_NONE,
+    ACTION_SELECT_NORMAL,
+    ACTION_SELECT_TOUCH,
+    ACTION_RESTORE_NORMAL
+};
+
+static RuntimeAction getRuntimeAction(
     unsigned long currentMillis,
     unsigned long previousSelectionMillis,
-    bool hasPreviousSelection,
+    unsigned long overlayStartMillis,
+    bool hasCachedNormal,
+    bool overlayActive,
     bool contextChanged,
     bool touchRequested
 ) {
-    return !hasPreviousSelection ||
-           contextChanged ||
-           touchRequested ||
-           (currentMillis - previousSelectionMillis >= MESSAGE_INTERVAL);
+    if (!hasCachedNormal || contextChanged) return ACTION_SELECT_NORMAL;
+    if (touchRequested) return ACTION_SELECT_TOUCH;
+    if (overlayActive) {
+        return currentMillis - overlayStartMillis >= TOUCH_FLIRT_DISPLAY_MS
+            ? ACTION_RESTORE_NORMAL
+            : ACTION_NONE;
+    }
+    return currentMillis - previousSelectionMillis >= MESSAGE_INTERVAL
+        ? ACTION_SELECT_NORMAL
+        : ACTION_NONE;
 }
 
 void setup() {
@@ -42,7 +61,7 @@ void setup() {
     
     Serial.println(F("================================"));
     Serial.println(F("KALACHAKRAM"));
-    Serial.println(F("V0.6.1 - TRIGGER-AWARE MANGLISH"));
+    Serial.println(F("V0.6.2 - ENGLISH PERSONALITY"));
     Serial.println(F("================================"));
 
 #if KALACHAKRAM_TEST_MODE
@@ -71,26 +90,26 @@ void loop() {
     ContextPhase phase = classifyContextPhase(current, vibe);
     uint8_t contextMinute = getMinuteInContextPhase(current, vibe, phase);
 
-    bool contextChanged = hasSelectedMessage &&
+    bool contextChanged = hasNormalMessage &&
         (vibe != currentVibe || phase != currentPhase);
     bool touchRequested = wasTouchPressed(currentMillis);
 
-    if (isMessageSelectionDue(
+    RuntimeAction action = getRuntimeAction(
         currentMillis,
         lastMessageTime,
-        hasSelectedMessage,
+        flirtOverlayStartTime,
+        hasNormalMessage,
+        flirtOverlayActive,
         contextChanged,
         touchRequested
-    )) {
-        MessageTrigger trigger;
-        if (touchRequested) {
-            trigger = TRIGGER_TOUCH;
-        } else if (!hasSelectedMessage) {
-            trigger = TRIGGER_STARTUP;
-        } else if (contextChanged) {
-            trigger = TRIGGER_CONTEXT;
-        } else {
-            trigger = TRIGGER_TIMER;
+    );
+
+    if (action == ACTION_SELECT_NORMAL || action == ACTION_SELECT_TOUCH) {
+        MessageTrigger trigger = TRIGGER_TOUCH;
+        if (action == ACTION_SELECT_NORMAL) {
+            if (!hasNormalMessage) trigger = TRIGGER_STARTUP;
+            else if (contextChanged) trigger = TRIGGER_CONTEXT;
+            else trigger = TRIGGER_TIMER;
         }
 
         Message msg;
@@ -104,12 +123,20 @@ void loop() {
             &combinationIndex
         );
 
-        currentVibe = vibe;
-        currentPhase = phase;
-        // This timestamp is updated only after a message is actually selected.
-        // Ordinary loop iterations cannot postpone the next 60-second refresh.
+        if (action == ACTION_SELECT_NORMAL) {
+            cachedNormalMessage = msg;
+            currentVibe = vibe;
+            currentPhase = phase;
+            hasNormalMessage = true;
+            flirtOverlayActive = false;
+        } else {
+            flirtOverlayActive = true;
+            flirtOverlayStartTime = currentMillis;
+        }
+
+        // A normal selection or accepted touch starts a fresh 60-second window.
+        // Restoring the cached message does not touch this timestamp.
         lastMessageTime = currentMillis;
-        hasSelectedMessage = true;
         
         Serial.println(F("================================"));
         Serial.print(F("TRIGGER: "));
@@ -130,6 +157,12 @@ void loop() {
         Serial.println(F("================================\n"));
 
         displayMessage(msg);
+    } else if (action == ACTION_RESTORE_NORMAL) {
+        flirtOverlayActive = false;
+        Serial.println(F("OVERLAY: RESTORE NORMAL"));
+        Serial.println(cachedNormalMessage.line1);
+        Serial.println(cachedNormalMessage.line2);
+        displayMessage(cachedNormalMessage);
     }
     
     // 1-second debug tick
@@ -349,8 +382,8 @@ void runTests() {
     int validTouchCount = validateMessages(PERSONALITY_FLIRTY);
     Serial.print(F("TOUCH: "));
     Serial.print(validTouchCount);
-    Serial.println(F(" / 288 combinations valid"));
-    if (validTouchCount != 288) msgFail++;
+    Serial.println(F(" / 1200 combinations valid"));
+    if (validTouchCount != 1200) msgFail++;
     else msgPass++;
     
     int totalAutoCount = countMessages(PERSONALITY_NORMAL);
@@ -359,7 +392,7 @@ void runTests() {
     Serial.println(totalAutoCount);
     Serial.print(F("TOUCH combinations: "));
     Serial.println(totalTouchCount);
-    if (totalAutoCount != 2340 || totalTouchCount != 288) msgFail++;
+    if (totalAutoCount != 2340 || totalTouchCount != 1200) msgFail++;
     else msgPass++;
     
     Serial.println(F("\n=== REPEAT PREVENTION TESTS ==="));
@@ -380,27 +413,62 @@ void runTests() {
     int schedulerFailures = 0;
     unsigned long selectionTime = 1000UL;
 
-    if (isMessageSelectionDue(60999UL, selectionTime, true, false, false)) {
+    if (getRuntimeAction(60999UL, selectionTime, 0UL,
+                         true, false, false, false) != ACTION_NONE) {
         schedulerFailures++;
     }
-    if (!isMessageSelectionDue(61000UL, selectionTime, true, false, false)) {
+    if (getRuntimeAction(61000UL, selectionTime, 0UL,
+                         true, false, false, false) != ACTION_SELECT_NORMAL) {
         schedulerFailures++;
     }
-    if (!isMessageSelectionDue(1001UL, selectionTime, true, true, false)) {
+    if (getRuntimeAction(1001UL, selectionTime, 0UL,
+                         true, false, true, false) != ACTION_SELECT_NORMAL) {
         schedulerFailures++;
     }
-    if (!isMessageSelectionDue(0UL, 0UL, false, false, false)) {
+    if (getRuntimeAction(0UL, 0UL, 0UL,
+                         false, false, false, false) != ACTION_SELECT_NORMAL) {
         schedulerFailures++;
     }
-    if (!isMessageSelectionDue(1001UL, selectionTime, true, false, true)) {
+    if (getRuntimeAction(1001UL, selectionTime, 0UL,
+                         true, false, false, true) != ACTION_SELECT_TOUCH) {
         schedulerFailures++;
     }
 
-    // A touch selection at 30 seconds restarts the full 60-second interval.
-    if (isMessageSelectionDue(89999UL, 30000UL, true, false, false)) {
+    // A1 at t=0, T1 at t=25s, restore A1 at t=35s, then A2 at t=85s.
+    if (getRuntimeAction(34999UL, 25000UL, 25000UL,
+                         true, true, false, false) != ACTION_NONE) {
         schedulerFailures++;
     }
-    if (!isMessageSelectionDue(90000UL, 30000UL, true, false, false)) {
+    if (getRuntimeAction(35000UL, 25000UL, 25000UL,
+                         true, true, false, false) != ACTION_RESTORE_NORMAL) {
+        schedulerFailures++;
+    }
+    if (getRuntimeAction(84999UL, 25000UL, 25000UL,
+                         true, false, false, false) != ACTION_NONE) {
+        schedulerFailures++;
+    }
+    if (getRuntimeAction(85000UL, 25000UL, 25000UL,
+                         true, false, false, false) != ACTION_SELECT_NORMAL) {
+        schedulerFailures++;
+    }
+
+    // Re-touch takes priority over expiry and restarts both timers.
+    if (getRuntimeAction(30000UL, 25000UL, 25000UL,
+                         true, true, false, true) != ACTION_SELECT_TOUCH) {
+        schedulerFailures++;
+    }
+    if (getRuntimeAction(40000UL, 30000UL, 30000UL,
+                         true, true, false, false) != ACTION_RESTORE_NORMAL) {
+        schedulerFailures++;
+    }
+    if (getRuntimeAction(90000UL, 30000UL, 30000UL,
+                         true, false, false, false) != ACTION_SELECT_NORMAL) {
+        schedulerFailures++;
+    }
+
+    // A context transition always cancels the old-context flirt overlay.
+    if (getRuntimeAction(30000UL, 25000UL, 25000UL,
+                         true, true, true, true) != ACTION_SELECT_NORMAL) {
         schedulerFailures++;
     }
 
@@ -412,15 +480,17 @@ void runTests() {
     }
 
     unsigned long rolloverSelectionTime = 0xFFFFFF00UL;
-    unsigned long rolloverRefreshTime =
-        rolloverSelectionTime + MESSAGE_INTERVAL;
-    if (!isMessageSelectionDue(
-        rolloverRefreshTime,
-        rolloverSelectionTime,
-        true,
-        false,
-        false
-    )) {
+    unsigned long rolloverRefreshTime = rolloverSelectionTime + MESSAGE_INTERVAL;
+    if (getRuntimeAction(rolloverRefreshTime, rolloverSelectionTime, 0UL,
+                         true, false, false, false) != ACTION_SELECT_NORMAL) {
+        schedulerFailures++;
+    }
+    unsigned long rolloverFlirtTime = 0xFFFFF000UL;
+    unsigned long rolloverRestoreTime =
+        rolloverFlirtTime + TOUCH_FLIRT_DISPLAY_MS;
+    if (getRuntimeAction(rolloverRestoreTime, rolloverFlirtTime,
+                         rolloverFlirtTime, true, true, false, false) !=
+        ACTION_RESTORE_NORMAL) {
         schedulerFailures++;
     }
 
@@ -429,7 +499,7 @@ void runTests() {
     if (schedulerFailures > 0) msgFail++;
     else msgPass++;
     
-    Serial.println(F("\n=== V0.6.1 RESULT ==="));
+    Serial.println(F("\n=== V0.6.2 RESULT ==="));
     Serial.print(msgPass);
     Serial.println(F(" PASSED"));
     Serial.print(msgFail);

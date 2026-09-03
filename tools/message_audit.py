@@ -42,9 +42,12 @@ CONTEXT_BOUNDARIES_SECONDS = tuple(
         }
     )
 )
-TOUCH_SETUP_COUNT = 3
-TOUCH_REACTIONS_PER_VIBE = 4
-TOUCH_CAPACITY = 12
+TOUCH_SETUP_COUNT = 5
+TOUCH_REACTIONS_PER_VIBE = 10
+TOUCH_CAPACITY = 50
+MESSAGE_INTERVAL_MS = 60_000
+TOUCH_FLIRT_DISPLAY_MS = 10_000
+UINT32_MASK = 0xFFFFFFFF
 
 
 def extract_strings(source: str, array_name: str) -> list[str]:
@@ -86,8 +89,8 @@ def auto_permuted(pool_index: int, counter: int, capacity: int) -> int:
 
 
 def touch_permuted(pool_index: int, counter: int) -> int:
-    offset = (pool_index * 7 + 3) % TOUCH_CAPACITY
-    return (5 * counter + offset) % TOUCH_CAPACITY
+    offset = (pool_index * 19 + 7) % TOUCH_CAPACITY
+    return (21 * counter + offset) % TOUCH_CAPACITY
 
 
 def context_for_minute(minute: int) -> tuple[int, int, int]:
@@ -238,12 +241,40 @@ def print_samples(label: str, pools: list[list[tuple[str, str]]]) -> None:
                 variants[(phase * 2 + setup_index) % len(variants)]
                 for setup_index, variants in enumerate(variants_by_setup.values())
             ]
-            candidates.extend(
-                distinct_setups[:2] if phase < 2 else distinct_setups[:1]
-            )
+            candidates.extend(distinct_setups[:4] if phase == 0 else distinct_setups[:3])
         print(f"{vibe}:")
-        for line1, line2 in candidates[:5]:
+        for line1, line2 in candidates[:10]:
             print(f"  {line1} / {line2}")
+
+
+def elapsed_u32(now: int, then: int) -> int:
+    return (now - then) & UINT32_MASK
+
+
+def runtime_action(
+    now: int,
+    previous_selection: int,
+    overlay_start: int,
+    has_cached_normal: bool,
+    overlay_active: bool,
+    context_changed: bool,
+    touch_requested: bool,
+) -> str:
+    if not has_cached_normal or context_changed:
+        return "SELECT_NORMAL"
+    if touch_requested:
+        return "SELECT_TOUCH"
+    if overlay_active:
+        return (
+            "RESTORE_NORMAL"
+            if elapsed_u32(now, overlay_start) >= TOUCH_FLIRT_DISPLAY_MS
+            else "NONE"
+        )
+    return (
+        "SELECT_NORMAL"
+        if elapsed_u32(now, previous_selection) >= MESSAGE_INTERVAL_MS
+        else "NONE"
+    )
 
 
 def main() -> int:
@@ -257,10 +288,10 @@ def main() -> int:
 
     if len(configs) != 24:
         errors.append(f"Expected 24 pool configs, found {len(configs)}")
-    if len(touch_setups) != 72:
-        errors.append(f"Expected 72 touch setups, found {len(touch_setups)}")
-    if len(touch_reactions) != 32:
-        errors.append(f"Expected 32 touch reactions, found {len(touch_reactions)}")
+    if len(touch_setups) != 120:
+        errors.append(f"Expected 120 touch setups, found {len(touch_setups)}")
+    if len(touch_reactions) != 80:
+        errors.append(f"Expected 80 touch reactions, found {len(touch_reactions)}")
 
     auto_pools, touch_pools = outputs_by_pool(
         configs,
@@ -299,8 +330,8 @@ def main() -> int:
             errors.append(f"{context}: duplicate TOUCH output inside pool")
         if auto_capacity < duration:
             errors.append(f"{context}: AUTO capacity below phase duration")
-        if not 8 <= touch_capacity <= 20:
-            errors.append(f"{context}: TOUCH capacity outside target 8..20")
+        if touch_capacity != 50:
+            errors.append(f"{context}: TOUCH capacity is not exactly 50")
         if len(
             {
                 auto_permuted(pool_index, counter, auto_capacity)
@@ -314,6 +345,7 @@ def main() -> int:
             errors.append(f"{context}: TOUCH permutation is not full-cycle")
 
     fragments = auto_setups + auto_reactions + touch_setups + touch_reactions
+    maximum_line_length = max(len(fragment) for fragment in fragments)
     overlong = [fragment for fragment in fragments if len(fragment) > 16]
     non_ascii = [fragment for fragment in fragments if not fragment.isascii()]
     empty = [fragment for fragment in fragments if not fragment]
@@ -328,47 +360,63 @@ def main() -> int:
     ]
 
     flirty_auto_terms = (
-        "MISS ME",
-        "ENNE NOK",
-        "CUTE",
-        "ADORABLE",
-        "FLIRT",
-        "TOUCH",
+        "MISS ME", "MISSED ME", "YOU'RE CUTE", "ADORABLE", "FLIRT",
+        "LOOKING AT ME", "STAY WITH ME", "I'M FLATTERED", "COME CLOSER",
+        "I MIGHT BLUSH", "ROMANTIC", "FOR ME?",
     )
     flirty_auto = [
         fragment
         for fragment in auto_setups + auto_reactions
         if any(term in fragment for term in flirty_auto_terms)
     ]
-    unsafe_touch_terms = ("SEXY", "BODY", "KISS", "HOT BODY", "MINE ONLY")
+    unsafe_touch_terms = (
+        "SEXY", "BODY", "KISS", "HOT BODY", "MINE ONLY", "BELONG TO ME",
+        "YOU'RE MINE", "UNDRESS", "NAKED",
+    )
     unsafe_touch = [
         fragment
         for fragment in touch_setups + touch_reactions
         if any(term in fragment for term in unsafe_touch_terms)
     ]
     awkward_touch = [
-        pair for pair in touch_outputs if "MISS" in pair[0] and "MISS" in pair[1]
+        pair
+        for pair in touch_outputs
+        if any(
+            word in pair[0] and word in pair[1]
+            for word in ("MISS", "BACK", "TOUCH", "CURIOUS", "CUTE", "BOLD")
+        )
     ]
-    setup_manglish_markers = (
-        "AAK", "AANO", "AAY", "ADUTHU", "ALLE", "BAAKI", "CHAYA",
-        "CHINTHA", "CHODIK", "CHUMMA", "DHOORAM", "ENTHA", "ETHI",
-        "DESKIL", "ENTHINA", "ETHARAYI", "EVDE", "EZHUNNETTU", "INNU", "INI",
-        "IPPOZHUM", "IRUNNO", "IRUT", "IVDE", "JAYICHU", "KAATH",
-        "KAIVITTU", "KAND", "KANN", "KASHTAM", "KAZHI", "KITT",
-        "KAIVIDUNNU", "KULAM", "MADUTHU", "MANGUNNU", "MARANNO", "MATHI", "MAYAKKAM",
-        "MOSHAM", "MUDIYO", "NADAK", "NALLA",
-        "NALE", "NERATHE", "NIRTHI", "NOK", "ONNUM", "ORMA", "PANI", "PINNE",
-        "POK", "POLE", "POLIYUNNU", "POY", "RAAVILE", "RAKSHAYILLA",
-        "RATHRI", "READYANO",
-        "THEER", "THANNE", "THUDANG", "THURANNU", "UCHAYA", "UCHAYIL", "UNDA", "UNDO", "UNDU",
-        "URAKK", "URANG", "VALIYUNNU", "VAR", "VAYAR", "VAYYA", "VEND",
-        "VENAM", "VENO", "VIDUNNILLA", "VIDUNNO", "VILIKK", "VISHAPPU", "VISHANNU",
-        "VITT", "VANN", "VAIKUNNERAM",
+    exact_echo_touch = [
+        pair
+        for pair in touch_outputs
+        if re.sub(r"[^A-Z0-9]", "", pair[0].upper()) ==
+           re.sub(r"[^A-Z0-9]", "", pair[1].upper())
+    ]
+    manglish_vocabulary = (
+        "AAK", "AAKUM", "AANO", "AANALLO", "AAYI", "AAYO", "ADUTHU",
+        "ALLE", "ATHU", "BAAKI", "CHAYA", "CHEYYU", "CHEYTHO", "CHINTHA",
+        "CHODIKKUNNU", "CHUMMA", "DHOORAM", "ENTHA", "ENTHINA", "ETHARAYI",
+        "ETHI", "EVDE", "EVIDE", "EZHUNNETTU", "ILLE", "ILLA", "INNU",
+        "INNUM", "INI", "INIYUM", "IPPO", "IPPOZHUM", "IRUNNO", "IRUTTU",
+        "IVDE", "IVIDE", "JAYICHU", "KAATHU", "KAIVIDUNNU", "KANDU", "KANN",
+        "KASHTAM", "KAZHINJU", "KAZHINJO", "KITTUMO", "KULAMAYI", "MADUTHU",
+        "MANGUNNU", "MARANNO", "MATHI", "MAYAKKAM", "MONE", "MOSHAM",
+        "MUDIYO", "NADAKKUNNO", "NALLA", "NALE", "NERATHE", "NIRTHI", "NJAN",
+        "NOKKAM", "NOKKO", "NOKKU", "NOKKUNNU", "ONNUM", "ORMA", "PANI",
+        "PARAYUM", "PINNE", "POKANDE", "POLE", "POLIYUNNU", "POYI", "RAAVILE",
+        "RAATHRI", "RATHRI", "RAKSHAYILLA", "READYANO", "SAMAYAM", "SHERI",
+        "THANNE", "THEERARAYI", "THEERKKU", "THUDANGI", "UCHAYA", "UCHAYIL",
+        "UNDA", "UNDALLO", "UNDO", "UNDU", "URAKKAM", "URANGI", "VAIKUNNERAM",
+        "VALIYUNNU", "VANNO", "VANNALLO", "VARUM", "VARUNNU", "VAYAR", "VAYYA",
+        "VEE", "VEENDUM", "VENAM", "VENAMO", "VENDA", "VENO", "VIDUNNILLA",
+        "VIDUNNO", "VILIKKUM", "VISHAPPU", "VISHANNU", "VITTALLO",
     )
-    english_heavy_auto_setups = [
-        setup
-        for setup in auto_setups
-        if not any(marker in setup for marker in setup_manglish_markers)
+    manglish_pattern = re.compile(
+        r"\b(?:" + "|".join(re.escape(word) for word in manglish_vocabulary) + r")\b",
+        re.IGNORECASE,
+    )
+    manglish_fragments = [
+        fragment for fragment in fragments if manglish_pattern.search(fragment)
     ]
     forbidden_phrases = (
         "DEFINITELY PM",
@@ -382,11 +430,10 @@ def main() -> int:
         for fragment in fragments
         if any(phrase in fragment for phrase in forbidden_phrases)
     ]
-    vee_fragments = [
-        fragment for fragment in fragments if re.search(r"\bVEE\b", fragment)
-    ]
     exact_time_pattern = re.compile(
-        r"(?:\b\d{1,2}\s*(?:AM|PM)\b|\b\d{1,2}:\d{2}\b|\b(?:AM|PM)\b)",
+        r"(?:\b\d{1,2}\s*(?:AM|PM)\b|\b\d{1,2}:\d{2}\b|\b(?:AM|PM)\b|"
+        r"\b(?:ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|ELEVEN|TWELVE)"
+        r"(?:\s+MORE)?\s+(?:MINUTES?|HOURS?)\b)",
         re.IGNORECASE,
     )
     exact_time_leaks = [
@@ -415,18 +462,16 @@ def main() -> int:
     if unsafe_touch:
         errors.append(f"Unsafe TOUCH terms: {unsafe_touch}")
     if awkward_touch:
-        errors.append(f"Awkward repeated-MISS TOUCH pairs: {awkward_touch}")
-    if english_heavy_auto_setups:
-        errors.append(
-            f"English-heavy AUTO setups: {english_heavy_auto_setups}"
-        )
+        errors.append(f"Awkward repeated-keyword TOUCH pairs: {awkward_touch}")
+    if exact_echo_touch:
+        errors.append(f"Exact two-line echo TOUCH pairs: {exact_echo_touch}")
+    if manglish_fragments:
+        errors.append(f"Manglish fragments: {manglish_fragments}")
     if forbidden_phrase_hits:
         errors.append(f"Forbidden awkward phrases: {forbidden_phrase_hits}")
-    if vee_fragments:
-        errors.append(f"Unnatural VEE fragments: {vee_fragments}")
     if exact_time_leaks:
         errors.append(f"Exact-time leaks: {exact_time_leaks}")
-    if unique_touch_reactions < 24:
+    if unique_touch_reactions < 60:
         errors.append(
             f"Insufficient TOUCH reaction variety: {unique_touch_reactions} unique"
         )
@@ -505,6 +550,93 @@ def main() -> int:
     if len(touch_pairs) != len(set(touch_pairs)):
         errors.append("Required trigger interleaving repeated TOUCH output")
 
+    # Overlay scenario: A1 -> T1 -> restore A1 -> A2.
+    a1_index = auto_permuted(pool_index, 7, auto_capacity)
+    a2_index = auto_permuted(pool_index, 8, auto_capacity)
+    a1 = pair_from_auto_index(
+        pool_index, a1_index, configs, auto_setups, auto_reactions
+    )
+    a2 = pair_from_auto_index(
+        pool_index, a2_index, configs, auto_setups, auto_reactions
+    )
+    t1 = pair_from_touch_index(
+        pool_index, touch_permuted(pool_index, 0), touch_setups, touch_reactions
+    )
+    t2 = pair_from_touch_index(
+        pool_index, touch_permuted(pool_index, 1), touch_setups, touch_reactions
+    )
+
+    overlay_actions = (
+        runtime_action(25_000, 0, 0, True, False, False, True),
+        runtime_action(34_999, 25_000, 25_000, True, True, False, False),
+        runtime_action(35_000, 25_000, 25_000, True, True, False, False),
+        runtime_action(84_999, 25_000, 25_000, True, False, False, False),
+        runtime_action(85_000, 25_000, 25_000, True, False, False, False),
+    )
+    expected_overlay_actions = (
+        "SELECT_TOUCH", "NONE", "RESTORE_NORMAL", "NONE", "SELECT_NORMAL"
+    )
+    if overlay_actions != expected_overlay_actions:
+        errors.append(f"Flirt-expiry scheduler mismatch: {overlay_actions}")
+    overlay_sequence = (("A1", a1), ("T1", t1), ("RESTORE A1", a1), ("A2", a2))
+
+    retouch_actions = (
+        runtime_action(25_000, 0, 0, True, False, False, True),
+        runtime_action(30_000, 25_000, 25_000, True, True, False, True),
+        runtime_action(39_999, 30_000, 30_000, True, True, False, False),
+        runtime_action(40_000, 30_000, 30_000, True, True, False, False),
+        runtime_action(89_999, 30_000, 30_000, True, False, False, False),
+        runtime_action(90_000, 30_000, 30_000, True, False, False, False),
+    )
+    expected_retouch_actions = (
+        "SELECT_TOUCH", "SELECT_TOUCH", "NONE", "RESTORE_NORMAL", "NONE",
+        "SELECT_NORMAL",
+    )
+    if retouch_actions != expected_retouch_actions:
+        errors.append(f"Re-touch scheduler mismatch: {retouch_actions}")
+    retouch_sequence = (
+        ("A1", a1), ("T1", t1), ("T2", t2), ("RESTORE A1", a1), ("A2", a2)
+    )
+
+    new_pool_index = VIBES.index("EVENING") * 3 + PHASES.index("LATE")
+    new_capacity = len(auto_pools[new_pool_index])
+    new_normal = pair_from_auto_index(
+        new_pool_index,
+        auto_permuted(new_pool_index, 0, new_capacity),
+        configs,
+        auto_setups,
+        auto_reactions,
+    )
+    context_action = runtime_action(
+        30_000, 25_000, 25_000, True, True, True, True
+    )
+    if context_action != "SELECT_NORMAL" or new_normal == a1:
+        errors.append("Context transition did not replace old overlay cache")
+    context_sequence = (("A1", a1), ("T1", t1), ("NEW-CONTEXT NORMAL", new_normal))
+
+    touch_cycle_indexes = [
+        touch_permuted(pool_index, counter) for counter in range(TOUCH_CAPACITY)
+    ]
+    touch_51st_index = touch_permuted(pool_index, TOUCH_CAPACITY)
+    if len(set(touch_cycle_indexes)) != TOUCH_CAPACITY:
+        errors.append("50-touch cycle is not unique")
+    if touch_51st_index != touch_cycle_indexes[0]:
+        errors.append("51st touch does not begin the next cycle")
+
+    rollover_start = 0xFFFFFF00
+    rollover_restore = (rollover_start + TOUCH_FLIRT_DISPLAY_MS) & UINT32_MASK
+    rollover_auto = (rollover_start + MESSAGE_INTERVAL_MS) & UINT32_MASK
+    if runtime_action(
+        rollover_restore, rollover_start, rollover_start,
+        True, True, False, False,
+    ) != "RESTORE_NORMAL":
+        errors.append("Flirt overlay millis rollover test failed")
+    if runtime_action(
+        rollover_auto, rollover_start, rollover_start,
+        True, False, False, False,
+    ) != "SELECT_NORMAL":
+        errors.append("AUTO timer millis rollover test failed")
+
     print("VIBE | PHASE | MINUTES | AUTO CAPACITY | TOUCH CAPACITY")
     for row in pool_rows:
         print(" | ".join(str(value) for value in row))
@@ -519,14 +651,16 @@ def main() -> int:
     print(f"TOUCH duplicates: {len(touch_duplicates)}")
     print(f"TOUCH cross-context duplicates: {len(touch_cross_context)}")
     print(f"Exact full-message AUTO/TOUCH overlap: {len(overlap)}")
+    print(f"Maximum fragment length: {maximum_line_length}")
     print(f"Overlong fragments: {len(overlong)}")
+    print(f"Empty fragments: {len(empty)}")
     print(f"Non-ASCII fragments: {len(non_ascii)}")
     print(f"Flirty/touch AUTO fragments: {len(flirty_auto)}")
     print(f"Unsafe TOUCH fragments: {len(unsafe_touch)}")
-    print(f"Awkward repeated-MISS TOUCH pairs: {len(awkward_touch)}")
-    print(f"English-heavy AUTO setup fragments: {len(english_heavy_auto_setups)}")
+    print(f"Awkward repeated-keyword TOUCH pairs: {len(awkward_touch)}")
+    print(f"Exact two-line echo TOUCH pairs: {len(exact_echo_touch)}")
+    print(f"Manglish fragments detected: {len(manglish_fragments)}")
     print(f"Forbidden awkward phrase hits: {len(forbidden_phrase_hits)}")
-    print(f"Unnatural VEE fragments: {len(vee_fragments)}")
     print(f"Exact-time leaks: {len(exact_time_leaks)}")
     print(f"Unique TOUCH reaction fragments: {unique_touch_reactions}")
     print(f"24-hour boot-time simulations: {tested_starts}")
@@ -537,6 +671,21 @@ def main() -> int:
     print("\n=== REQUIRED TRIGGER INTERLEAVING ===")
     for label, (line1, line2) in interleaving:
         print(f"{label}: {line1} / {line2}")
+
+    print("\n=== FLIRT OVERLAY SIMULATION ===")
+    for label, (line1, line2) in overlay_sequence:
+        print(f"{label}: {line1} / {line2}")
+    print("\n=== RE-TOUCH SIMULATION ===")
+    for label, (line1, line2) in retouch_sequence:
+        print(f"{label}: {line1} / {line2}")
+    print("\n=== CONTEXT-CHANGE-DURING-FLIRT SIMULATION ===")
+    for label, (line1, line2) in context_sequence:
+        print(f"{label}: {line1} / {line2}")
+    print("\n=== TOUCH CYCLE ===")
+    print(f"Selections before wrap: {TOUCH_CAPACITY}")
+    print(f"Unique before wrap: {len(set(touch_cycle_indexes))}")
+    print(f"51st restarts at first index: {touch_51st_index == touch_cycle_indexes[0]}")
+    print("Millis rollover tests: PASS")
 
     print_samples("AUTO", auto_pools)
     print_samples("TOUCH", touch_pools)

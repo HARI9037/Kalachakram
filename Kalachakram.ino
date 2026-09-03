@@ -11,12 +11,24 @@ unsigned long lastPrintTime = 0;
 const unsigned long PRINT_INTERVAL = 1000; // 1 second
 
 unsigned long lastMessageTime = 0;
-const unsigned long MESSAGE_INTERVAL = 180000UL; // 3 minutes
-VibeCategory currentVibe = (VibeCategory)-1;
-ContextPhase currentPhase = (ContextPhase)-1;
+const unsigned long MESSAGE_INTERVAL = 60000UL; // 1 minute
+bool hasSelectedMessage = false;
+VibeCategory currentVibe = CURSED_HOURS;
+ContextPhase currentPhase = PHASE_EARLY;
 
 void runTests();
 void printTimeContext(const TimeContext& ctx);
+
+static bool isMessageSelectionDue(
+    unsigned long currentMillis,
+    unsigned long previousSelectionMillis,
+    bool hasPreviousSelection,
+    bool contextChanged
+) {
+    return !hasPreviousSelection ||
+           contextChanged ||
+           (currentMillis - previousSelectionMillis >= MESSAGE_INTERVAL);
+}
 
 void setup() {
     Serial.begin(9600);
@@ -24,7 +36,7 @@ void setup() {
     
     Serial.println(F("================================"));
     Serial.println(F("KALACHAKRAM"));
-    Serial.println(F("V0.4 - CONTEXT DEPTH"));
+    Serial.println(F("V0.4.1 - REFRESH HOTFIX"));
     Serial.println(F("================================"));
 
 #if KALACHAKRAM_TEST_MODE
@@ -50,23 +62,25 @@ void loop() {
     TimeContext current = getCurrentTime();
     VibeCategory vibe = classifyVibe(current);
     ContextPhase phase = classifyContextPhase(current, vibe);
-    
-    bool vibeChanged = (vibe != currentVibe);
-    bool phaseChanged = (phase != currentPhase);
-    bool timeExpired = (currentMillis - lastMessageTime >= MESSAGE_INTERVAL);
-    
-    // First time init
-    if (currentVibe == (VibeCategory)-1) {
-        vibeChanged = true;
-    }
-    
-    if (vibeChanged || phaseChanged || timeExpired) {
-        currentVibe = vibe;
-        currentPhase = phase;
-        lastMessageTime = currentMillis;
-        
+
+    bool contextChanged = hasSelectedMessage &&
+        (vibe != currentVibe || phase != currentPhase);
+
+    if (isMessageSelectionDue(
+        currentMillis,
+        lastMessageTime,
+        hasSelectedMessage,
+        contextChanged
+    )) {
         Message msg;
         selectMessage(vibe, phase, &msg);
+
+        currentVibe = vibe;
+        currentPhase = phase;
+        // This timestamp is updated only after a message is actually selected.
+        // Ordinary loop iterations cannot postpone the next 60-second refresh.
+        lastMessageTime = currentMillis;
+        hasSelectedMessage = true;
         
         Serial.println(F("================================"));
         Serial.print(F("TIME: "));
@@ -308,8 +322,42 @@ void runTests() {
     Serial.println(cycleFailures);
     if (cycleFailures > 0) msgFail++;
     else msgPass++;
+
+    Serial.println(F("\n=== REFRESH SCHEDULER TESTS ==="));
+    int schedulerFailures = 0;
+    unsigned long selectionTime = 1000UL;
+
+    if (isMessageSelectionDue(60999UL, selectionTime, true, false)) {
+        schedulerFailures++;
+    }
+    if (!isMessageSelectionDue(61000UL, selectionTime, true, false)) {
+        schedulerFailures++;
+    }
+    if (!isMessageSelectionDue(1001UL, selectionTime, true, true)) {
+        schedulerFailures++;
+    }
+    if (!isMessageSelectionDue(0UL, 0UL, false, false)) {
+        schedulerFailures++;
+    }
+
+    unsigned long rolloverSelectionTime = 0xFFFFFF00UL;
+    unsigned long rolloverRefreshTime =
+        rolloverSelectionTime + MESSAGE_INTERVAL;
+    if (!isMessageSelectionDue(
+        rolloverRefreshTime,
+        rolloverSelectionTime,
+        true,
+        false
+    )) {
+        schedulerFailures++;
+    }
+
+    Serial.print(F("Scheduler failures: "));
+    Serial.println(schedulerFailures);
+    if (schedulerFailures > 0) msgFail++;
+    else msgPass++;
     
-    Serial.println(F("\n=== V0.4 RESULT ==="));
+    Serial.println(F("\n=== V0.4.1 RESULT ==="));
     Serial.print(msgPass);
     Serial.println(F(" PASSED"));
     Serial.print(msgFail);

@@ -53,7 +53,8 @@ Know the time internally, refuse to reveal it properly, and offer observations s
 - Full-pool repeat prevention using a small used-bit mask.
 - Immediate-repeat prevention across pool-cycle boundaries.
 - Immediate reselection when the vibe or context phase changes.
-- Non-blocking phrase refresh every three minutes.
+- Non-blocking phrase refresh every 60 seconds.
+- Refresh scheduling updates its timestamp only after a message is selected, preventing ordinary loop iterations from postponing the next refresh.
 - Flash-backed message storage using AVR `PROGMEM`.
 - Fixed-size 16×2-safe message buffers.
 - Serial diagnostics at 9600 baud.
@@ -71,9 +72,11 @@ Know the time internally, refuse to reveal it properly, and offer observations s
 - The four-wire Arduino Uno/I²C LCD circuit was also validated in Tinkercad.
 
 Exact V0.4 compiler memory figures and the scanner-reported physical address were not recorded.
+The V0.4.1 one-minute refresh hotfix is implemented in the current source but still requires an Arduino Uno compile/upload and a timed physical refresh check.
 
 ### Pending / Final Polish
 
+- V0.4.1 Arduino Uno compile/upload and physical verification of consecutive 60-second refreshes.
 - Final enclosure and physical presentation.
 - Submission screenshots.
 - Build photographs.
@@ -189,7 +192,7 @@ The committed source currently configures `KALACHAKRAM_LCD_ADDRESS` as `0x27`. T
 3. Open Serial Monitor at **9600 baud**.
 4. Observe internal `TIME`, `VIBE`, `PHASE`, and `MESSAGE` diagnostics.
 5. Confirm that the physical LCD displays only the two selected phrase lines.
-6. Normal phrase refresh occurs approximately every three minutes; vibe and phase changes trigger immediate reselection.
+6. Normal phrase refresh occurs approximately every 60 seconds; vibe and phase changes trigger immediate reselection.
 
 ### Source Code Structure
 
@@ -263,6 +266,7 @@ Setting `KALACHAKRAM_TEST_MODE` to `1` enables:
 - Immediate-repeat testing across all 24 contextual pools.
 - Full four-message cycle coverage testing.
 - New-cycle, phase-change, and vibe-change reset checks.
+- Refresh scheduler checks immediately before and at the 60-second boundary, on first selection, on context change, and across `millis()` rollover.
 
 These tests exist in the firmware, but no physical execution result for the logical test mode has been recorded.
 

@@ -8,16 +8,19 @@ struct Message {
     char line2[17];
 };
 
-// Selects a random message for the given vibe, avoiding immediate repetition
-void selectMessage(VibeCategory vibe, Message* output);
+// Selects from the active vibe/phase pool without repeating within a cycle
+void selectMessage(VibeCategory vibe, ContextPhase phase, Message* output);
 
-// Returns the number of valid messages found (max 48) where lengths <= 16
+// Returns the number of initialized messages whose two lines fit the LCD
 int validateMessages();
 
-// Returns the total number of messages in the database
+// Counts initialized two-line messages in the database
 int countMessages();
 
-// Tests selection algorithm for immediate repeats across all categories
+// Tests selection algorithm for immediate repeats across all contextual pools
 int testRepetition();
+
+// Tests full four-message cycle coverage and context-reset behavior
+int testMessageCycle();
 
 #endif

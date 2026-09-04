@@ -371,15 +371,17 @@ Expected digital interface after checking the module datasheet:
 
 # Build Photos
 
-- Components photo: To be added after the final build.
-- Build-process photos: To be added after the final build.
-- Final-build photo: To be added after the final build.
+![Components](assets/WhatsApp%20Image%202026-09-04%20at%206.54.07%20AM%20(1).jpeg)
+
+![Build Process](assets/WhatsApp%20Image%202026-09-04%20at%206.54.07%20AM%20(2).jpeg)
+
+![Final Build](assets/WhatsApp%20Image%202026-09-04%20at%206.54.07%20AM%20(3).jpeg)
 
 ### Project Demo
 
 # Video
 
-Demo video: TBD.
+Demo video: [Watch here](https://drive.google.com/file/d/12r02e1mkJVkVbNaf2VqFUJYPebWLynGw/view?usp=drivesdk)
 
 # Additional Demos
 
